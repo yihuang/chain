@@ -15,7 +15,8 @@ pub use self::block_results::*;
 pub use tendermint::rpc::endpoint::{
     abci_query::AbciQuery, abci_query::Response as AbciQueryResponse,
     block::Response as BlockResponse, broadcast::tx_sync::Response as BroadcastTxResponse,
-    status::Response as Status,
+    commit::Response as CommitResponse, status::Response as Status,
+    validators::Response as ValidatorsResponse,
 };
 pub use tendermint::rpc::endpoint::{broadcast, status};
 pub use tendermint::{

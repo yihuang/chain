@@ -24,6 +24,32 @@ pub trait Client: Send + Sync {
         heights: T,
     ) -> Result<Vec<BlockResults>>;
 
+    /// Make `validators` call to tendermint
+    fn validators(&self, _height: u64) -> Result<ValidatorsResponse> {
+        unimplemented!()
+    }
+
+    /// Make batched `validators` call to tendermint
+    fn validators_batch<'a, T: Iterator<Item = &'a u64>>(
+        &self,
+        _height: T,
+    ) -> Result<Vec<ValidatorsResponse>> {
+        unimplemented!()
+    }
+
+    /// Make `commits` call to tendermint
+    fn commit(&self, _height: u64) -> Result<CommitResponse> {
+        unimplemented!()
+    }
+
+    /// Make batched `commit` call to tendermint
+    fn commit_batch<'a, T: Iterator<Item = &'a u64>>(
+        &self,
+        _height: T,
+    ) -> Result<Vec<CommitResponse>> {
+        unimplemented!()
+    }
+
     /// Makes `broadcast_tx_sync` call to tendermint
     fn broadcast_transaction(&self, transaction: &[u8]) -> Result<BroadcastTxResponse>;
 

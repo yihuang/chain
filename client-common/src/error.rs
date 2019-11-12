@@ -121,6 +121,8 @@ pub enum ErrorKind {
     InternalError,
     /// Validator error
     ValidationError,
+    /// Block data verify failed
+    VerifyError,
 }
 
 impl fmt::Display for ErrorKind {
@@ -142,6 +144,7 @@ impl fmt::Display for ErrorKind {
             ErrorKind::MultiSigError => write!(f, "Multi-sig error"),
             ErrorKind::InternalError => write!(f, "Internal error"),
             ErrorKind::ValidationError => write!(f, "Validation error"),
+            ErrorKind::VerifyError => write!(f, "Verify error"),
         }
     }
 }

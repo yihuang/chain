@@ -16,7 +16,7 @@ use structopt::StructOpt;
 use chain_core::init::coin::Coin;
 use chain_core::state::account::StakedStateAddress;
 use client_common::storage::SledStorage;
-use client_common::tendermint::types::GenesisExt;
+use client_common::tendermint::types::{GenesisExt, Height};
 use client_common::tendermint::{Client, WebsocketRpcClient};
 use client_common::{ErrorKind, Result, ResultExt, Storage};
 #[cfg(not(feature = "mock-enc-dec"))]
@@ -25,7 +25,7 @@ use client_core::cipher::DefaultTransactionObfuscation;
 use client_core::cipher::MockAbciTransactionObfuscation;
 use client_core::handler::{DefaultBlockHandler, DefaultTransactionHandler};
 use client_core::signer::DefaultSigner;
-use client_core::synchronizer::{ManualSynchronizer, ProgressReport};
+use client_core::synchronizer::{ManualSynchronizer, ProgressReport, VerifiedSynchronizer};
 use client_core::transaction_builder::DefaultTransactionBuilder;
 use client_core::types::BalanceChange;
 use client_core::wallet::{DefaultWalletClient, WalletClient};
@@ -100,6 +100,16 @@ pub enum Command {
             help = "Force synchronization from genesis"
         )]
         force: bool,
+    },
+    #[structopt(name = "verified-sync", about = "lite client sync")]
+    VerifiedSync {
+        #[structopt(
+            name = "height",
+            short,
+            long,
+            help = "Start sync from the height known to be safe"
+        )]
+        height: Option<u64>,
     },
 }
 
@@ -239,6 +249,13 @@ impl Command {
                     ManualSynchronizer::new(storage, tendermint_client, block_handler);
 
                 Self::resync(synchronizer, name, *batch_size, *force)
+            }
+            Command::VerifiedSync { height } => {
+                let storage = SledStorage::new(storage_path())?;
+                let tendermint_client = WebsocketRpcClient::new(&tendermint_url())?;
+
+                let syncer = VerifiedSynchronizer::new(storage, tendermint_client);
+                syncer.sync(height.map(|h| Height::try_from_u64(h).unwrap()))
             }
         }
     }

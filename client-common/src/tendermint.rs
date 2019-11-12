@@ -6,9 +6,10 @@ mod unauthorized_client;
 #[cfg(feature = "websocket-rpc")]
 mod websocket_rpc_client;
 
+pub mod lite;
 pub mod types;
 
-pub use client::Client;
+pub use client::*;
 #[cfg(feature = "http-rpc")]
 pub use http_rpc_client::RpcClient;
 pub use unauthorized_client::UnauthorizedClient;

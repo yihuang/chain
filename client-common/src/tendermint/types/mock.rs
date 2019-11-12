@@ -7,13 +7,13 @@ use tendermint::{
     Version,
 };
 
-static DEFAULT_VALIDATOR_KEY: &str = "{
+const DEFAULT_VALIDATOR_KEY: &str = "{
   \"type\": \"tendermint/PrivKeyEd25519\",
   \"value\": \"gJWgIetdLxRc/C2t/XjV65NCqZLTqHS9pU69kBzRmyOKCHDqT/6bKPmKajdBp+KCbYtu9ttTX7+MXrEQOw8Kqg==\"
 }";
-static BLOCK_VERSION: u64 = 10;
-static APP_VERSION: u64 = 0;
-static APP_HASH: &str = "93E6C15E5A52CAAB971A810E5F6F9C4965AA102C81120FCEDCB7F8A112270380";
+const BLOCK_VERSION: u64 = 10;
+const APP_VERSION: u64 = 0;
+const APP_HASH: &str = "93E6C15E5A52CAAB971A810E5F6F9C4965AA102C81120FCEDCB7F8A112270380";
 
 pub fn validator_priv_key() -> PrivateKey {
     serde_json::from_str(DEFAULT_VALIDATOR_KEY).unwrap()
@@ -68,7 +68,7 @@ pub fn default_header() -> Header {
         },
         chain_id: default_chain_id(),
         height: Height::default(),
-        time: Time::default(),
+        time: Time::now(),
         num_txs: 0,
         total_txs: 0,
         last_block_id: block::Id::default(),
@@ -96,10 +96,20 @@ pub fn default_block() -> Block {
     }
 }
 
+pub fn sync_info() -> status::SyncInfo {
+    status::SyncInfo {
+        latest_block_hash: Hash::default(),
+        latest_app_hash: Hash::default(),
+        latest_block_height: Height::default(),
+        latest_block_time: Time::now(),
+        catching_up: true,
+    }
+}
+
 pub fn status_response() -> Status {
     Status {
         node_info: node_info(),
-        sync_info: status::SyncInfo::default(),
+        sync_info: sync_info(),
         validator_info: validator_info(),
     }
 }

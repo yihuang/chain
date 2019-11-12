@@ -161,6 +161,44 @@ impl Client for RpcClient {
             .collect::<Result<Vec<BlockResults>>>()
     }
 
+    fn validators(&self, height: u64) -> Result<ValidatorsResponse> {
+        let params = [json!(height.to_string())];
+        self.call("validators", &params)
+    }
+
+    fn validators_batch<'a, T: Iterator<Item = &'a u64>>(
+        &self,
+        heights: T,
+    ) -> Result<Vec<ValidatorsResponse>> {
+        let params = heights
+            .map(|height| ("validators", vec![json!(height.to_string())]))
+            .collect::<Vec<(&str, Vec<Value>)>>();
+        let rsps = self.call_batch::<ValidatorsResponse>(&params)?;
+
+        rsps.into_iter()
+            .map(|rsp| rsp.chain(|| (ErrorKind::InvalidInput, "Validators information not found")))
+            .collect::<Result<Vec<ValidatorsResponse>>>()
+    }
+
+    fn commit(&self, height: u64) -> Result<CommitResponse> {
+        let params = [json!(height.to_string())];
+        self.call("commit", &params)
+    }
+
+    fn commit_batch<'a, T: Iterator<Item = &'a u64>>(
+        &self,
+        heights: T,
+    ) -> Result<Vec<CommitResponse>> {
+        let params = heights
+            .map(|height| ("commit", vec![json!(height.to_string())]))
+            .collect::<Vec<(&str, Vec<Value>)>>();
+        let rsps = self.call_batch::<CommitResponse>(&params)?;
+
+        rsps.into_iter()
+            .map(|rsp| rsp.chain(|| (ErrorKind::InvalidInput, "Validators information not found")))
+            .collect::<Result<Vec<CommitResponse>>>()
+    }
+
     fn broadcast_transaction(&self, transaction: &[u8]) -> Result<BroadcastTxResponse> {
         let params = [json!(transaction)];
         self.call::<BroadcastTxResponse>("broadcast_tx_sync", &params)
