@@ -11,15 +11,18 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use itertools::izip;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tendermint::{lite::verifier, validator};
 use websocket::sender::Writer;
 use websocket::stream::sync::TcpStream;
 use websocket::OwnedMessage;
 
 use self::types::*;
+use crate::tendermint::lite;
 use crate::tendermint::types::*;
 use crate::tendermint::Client;
 use crate::{Error, ErrorKind, Result, ResultExt};
@@ -338,6 +341,37 @@ impl Client for WebsocketRpcClient {
             .map(|height| ("commit", vec![json!(height.to_string())]))
             .collect::<Vec<(&str, Vec<Value>)>>();
         self.call_batch::<CommitResponse>(params)
+    }
+
+    fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+        &self,
+        mut state: lite::TrustedState,
+        heights: T,
+    ) -> Result<(Vec<Block>, lite::TrustedState)> {
+        let commits = self.commit_batch(heights.clone())?;
+        let validators: Vec<validator::Set> = self
+            .validators_batch(heights.clone())?
+            .drain(..)
+            .map(|rsp| validator::Set::new(rsp.validators))
+            .collect();
+        let blocks = self.block_batch(heights)?;
+        for (commit, next_vals, block) in izip!(&commits, &validators, &blocks) {
+            verifier::verify_trusting(
+                block.header.clone(),
+                commit.signed_header.clone(),
+                state.validators.clone(),
+                next_vals.clone(),
+            )
+            .map_err(|err| {
+                Error::new(
+                    ErrorKind::VerifyError,
+                    format!("block verify failed: {:?}", err),
+                )
+            })?;
+            state.header = Some(block.header.clone());
+            state.validators = next_vals.clone();
+        }
+        Ok((blocks, state))
     }
 
     fn broadcast_transaction(&self, transaction: &[u8]) -> Result<BroadcastTxResponse> {

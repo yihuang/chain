@@ -1,5 +1,6 @@
 #![cfg(feature = "http-rpc")]
 
+use crate::tendermint::lite;
 use jsonrpc::client::Client as JsonRpcClient;
 use jsonrpc::Request;
 use serde::Deserialize;
@@ -197,6 +198,15 @@ impl Client for RpcClient {
         rsps.into_iter()
             .map(|rsp| rsp.chain(|| (ErrorKind::InvalidInput, "Validators information not found")))
             .collect::<Result<Vec<CommitResponse>>>()
+    }
+
+    fn block_batch_verified(
+        &self,
+        state: lite::TrustedState,
+        min_height: u64,
+        max_height: u64,
+    ) -> Result<Vec<Block>> {
+        Ok(vec![])
     }
 
     fn broadcast_transaction(&self, transaction: &[u8]) -> Result<BroadcastTxResponse> {

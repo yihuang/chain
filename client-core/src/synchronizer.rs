@@ -4,9 +4,7 @@ mod auto_sync_core;
 mod auto_sync_data;
 mod auto_synchronizer;
 mod manual_synchronizer;
-mod verified;
 
 pub use self::auto_sync::AutoSync;
 pub use self::auto_sync_data::AutoSyncInfo;
 pub use self::manual_synchronizer::{ManualSynchronizer, ProgressReport};
-pub use verified::VerifiedSynchronizer;

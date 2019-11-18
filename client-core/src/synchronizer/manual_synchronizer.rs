@@ -3,10 +3,11 @@ use std::sync::mpsc::Sender;
 
 use itertools::Itertools;
 use secstr::SecUtf8;
+use tendermint::validator;
 
 use chain_core::state::account::StakedStateAddress;
 use client_common::tendermint::types::{Block, BlockExt, BlockResults, Status};
-use client_common::tendermint::Client;
+use client_common::tendermint::{lite, Client};
 use client_common::{BlockHeader, Result, Storage, Transaction};
 
 use crate::service::{GlobalStateService, WalletService, WalletStateService};
@@ -78,6 +79,7 @@ where
         batch_size: Option<usize>,
         progress_reporter: Option<Sender<ProgressReport>>,
     ) -> Result<()> {
+        let trust_state = self.load_trust_state()?;
         let status = self.client.status()?;
 
         let last_block_height = self
@@ -126,7 +128,9 @@ where
             }
 
             // Fetch batch details if it cannot be fast forwarded
-            let blocks = self.client.block_batch(range.iter())?;
+            let (blocks, trust_state) = self
+                .client
+                .block_batch_verified(trust_state.clone(), range.iter())?;
             let block_results = self.client.block_results_batch(range.iter())?;
 
             for (block, block_result) in blocks.into_iter().zip(block_results.into_iter()) {
@@ -150,6 +154,7 @@ where
                     });
                 }
             }
+            self.global_state_service.save_trust_state(&trust_state)?;
         }
 
         Ok(())
@@ -233,6 +238,17 @@ where
             Ok(true)
         } else {
             Ok(false)
+        }
+    }
+
+    fn load_trust_state(&self) -> Result<lite::TrustedState> {
+        let opt = self.global_state_service.load_trust_state()?;
+        match opt {
+            None => Ok(lite::TrustedState {
+                header: None,
+                validators: validator::Set::new(self.client.genesis()?.validators),
+            }),
+            Some(st) => Ok(st),
         }
     }
 }

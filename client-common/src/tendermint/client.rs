@@ -1,3 +1,4 @@
+use crate::tendermint::lite;
 use crate::tendermint::types::*;
 use crate::Result;
 
@@ -47,6 +48,15 @@ pub trait Client: Send + Sync {
         &self,
         _height: T,
     ) -> Result<Vec<CommitResponse>> {
+        unimplemented!()
+    }
+
+    /// Fetch continuous blocks and verify them.
+    fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+        &self,
+        _state: lite::TrustedState,
+        _heights: T,
+    ) -> Result<(Vec<Block>, lite::TrustedState)> {
         unimplemented!()
     }
 
