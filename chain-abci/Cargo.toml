@@ -36,6 +36,7 @@ secp256k1zkp = { git = "https://github.com/crypto-com/rust-secp256k1-zkp.git", r
 blake2 = "0.8"
 parity-scale-codec = { features = ["derive"], version = "1.1" }
 zmq = "0.9"
+slab = "0.4.2"
 
 [dev-dependencies]
 quickcheck = "0.9"

@@ -4,3 +4,4 @@ pub mod liveness;
 pub mod punishment;
 pub mod slashing;
 pub mod storage;
+pub mod validator;
