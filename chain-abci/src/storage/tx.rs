@@ -80,18 +80,10 @@ pub fn verify_enclave_tx<T: EnclaveProxy>(
     accounts: &AccountStorage,
 ) -> Result<(Fee, Option<StakedState>), Error> {
     match txaux {
-        TxEnclaveAux::TransferTx {
-            inputs,
-            no_of_outputs,
-            payload,
-        } => {
+        TxEnclaveAux::TransferTx { inputs, .. } => {
             check_spent_input_lookup(&inputs, db)?;
             let response = tx_validator.process_request(EnclaveRequest::new_tx_request(
-                TxEnclaveAux::TransferTx {
-                    inputs: inputs.clone(),
-                    no_of_outputs: *no_of_outputs,
-                    payload: payload.clone(),
-                },
+                txaux.clone(),
                 None,
                 extra_info,
             ));
@@ -100,7 +92,7 @@ pub fn verify_enclave_tx<T: EnclaveProxy>(
                 _ => Err(Error::EnclaveRejected),
             }
         }
-        TxEnclaveAux::DepositStakeTx { tx, payload } => {
+        TxEnclaveAux::DepositStakeTx { tx, .. } => {
             let maccount = get_account(&tx.to_staked_account, last_account_root_hash, accounts);
             let account = match maccount {
                 Ok(a) => Some(a),
@@ -114,12 +106,8 @@ pub fn verify_enclave_tx<T: EnclaveProxy>(
             }
 
             check_spent_input_lookup(&tx.inputs, db)?;
-
             let response = tx_validator.process_request(EnclaveRequest::new_tx_request(
-                TxEnclaveAux::DepositStakeTx {
-                    tx: tx.clone(),
-                    payload: payload.clone(),
-                },
+                txaux.clone(),
                 account,
                 extra_info,
             ));
@@ -129,33 +117,16 @@ pub fn verify_enclave_tx<T: EnclaveProxy>(
             }
         }
         TxEnclaveAux::WithdrawUnbondedStakeTx {
-            payload:
-                TxObfuscated {
-                    key_from,
-                    init_vector,
-                    txpayload,
-                    txid,
-                },
+            payload: TxObfuscated { txid, .. },
             witness,
-            no_of_outputs,
+            ..
         } => {
-            let account_address = verify_tx_recover_address(&witness, &txid);
-            if let Err(_e) = account_address {
-                return Err(Error::EcdsaCrypto); // FIXME: Err(Error::EcdsaCrypto(e));
-            }
-            let account = get_account(&account_address.unwrap(), last_account_root_hash, accounts)?;
+            let account_address =
+                verify_tx_recover_address(&witness, &txid).map_err(|_| Error::EcdsaCrypto)?;
+            let account = get_account(&account_address, last_account_root_hash, accounts)?;
             verify_unjailed(&account)?;
             let response = tx_validator.process_request(EnclaveRequest::new_tx_request(
-                TxEnclaveAux::WithdrawUnbondedStakeTx {
-                    payload: TxObfuscated {
-                        key_from: *key_from,
-                        init_vector: *init_vector,
-                        txpayload: txpayload.clone(),
-                        txid: *txid,
-                    },
-                    witness: witness.clone(),
-                    no_of_outputs: *no_of_outputs,
-                },
+                txaux.clone(),
                 Some(account),
                 extra_info,
             ));
