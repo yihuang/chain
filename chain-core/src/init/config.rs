@@ -167,7 +167,10 @@ impl InitConfig {
             .collect()
     }
 
-    fn get_council_node(&self, address: &RedeemAddress) -> Result<CouncilNode, DistributionError> {
+    pub fn get_council_node(
+        &self,
+        address: &RedeemAddress,
+    ) -> Result<CouncilNode, DistributionError> {
         self.check_validator_address(address)?;
         let (name, security_contact, key) = self
             .council_nodes

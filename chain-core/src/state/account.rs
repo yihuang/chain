@@ -20,7 +20,7 @@ use std::str::FromStr;
 // TODO: switch to normal signatures + explicit public key
 #[cfg(feature = "hex")]
 use crate::init::address::ErrorAddress;
-use crate::state::tendermint::TendermintValidatorPubKey;
+use crate::state::tendermint::{TendermintValidatorPubKey, TendermintVotePower};
 use secp256k1::recovery::{RecoverableSignature, RecoveryId};
 use std::convert::From;
 #[cfg(feature = "hex")]
@@ -28,6 +28,8 @@ use std::convert::TryFrom;
 #[cfg(feature = "hex")]
 use std::fmt;
 use std::prelude::v1::{String, ToString};
+
+use super::tendermint::TendermintValidatorAddress;
 
 /// Each input is 34 bytes
 ///
@@ -422,6 +424,21 @@ impl StakedState {
         }
 
         Ok(slash_amount)
+    }
+
+    pub fn validator_address(&self) -> Option<TendermintValidatorAddress> {
+        self.council_node
+            .as_ref()
+            .map(|node| (&node.consensus_pubkey).into())
+    }
+
+    /// Convert bonded coin to voting power, zero if jailed.
+    pub fn voting_power(&self) -> TendermintVotePower {
+        if self.is_jailed() {
+            TendermintVotePower::zero()
+        } else {
+            TendermintVotePower::from(self.bonded)
+        }
     }
 }
 

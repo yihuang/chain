@@ -10,7 +10,8 @@ use abci::*;
 use log::info;
 
 pub use self::app_init::{
-    get_validator_key, init_app_hash, ChainNodeApp, ChainNodeState, ValidatorState,
+    compute_accounts_root, get_validator_key, init_app_hash, ChainNodeApp, ChainNodeState,
+    ValidatorState,
 };
 use crate::enclave_bridge::EnclaveProxy;
 use crate::slashing::SlashingSchedule;
@@ -410,7 +411,7 @@ impl<T: EnclaveProxy> abci::Application for ChainNodeApp<T> {
     }
 }
 
-fn update_validator_liveness(
+pub fn update_validator_liveness(
     state: &mut ChainNodeState,
     block_height: BlockHeight,
     last_commit_info: &LastCommitInfo,

@@ -1,7 +1,9 @@
 pub mod app;
+pub mod chain;
 pub mod enclave_bridge;
 pub mod liveness;
 pub mod punishment;
+pub mod pure;
 pub mod slashing;
 pub mod storage;
 pub mod validator;

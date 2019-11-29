@@ -247,7 +247,10 @@ fn store_valid_genesis_state(genesis_state: &ChainNodeState, inittx: &mut DBTran
     inittx.put(COL_EXTRA, b"init_chain_state", &encoded);
 }
 
-fn compute_accounts_root(account_storage: &mut AccountStorage, accounts: &[StakedState]) -> H256 {
+pub fn compute_accounts_root(
+    account_storage: &mut AccountStorage,
+    accounts: &[StakedState],
+) -> H256 {
     let mut keys: Vec<_> = accounts.iter().map(StakedState::key).collect();
     let wrapped: Vec<_> = accounts.iter().cloned().map(AccountWrapper).collect();
     account_storage

@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, HashMap};
 use std::iter::{repeat, FromIterator};
 
-use abci::{PubKey, ValidatorUpdate};
-
-use chain_core::init::coin::Coin;
+use chain_core::init::{coin::Coin, params::SlashRatio};
+use chain_core::state::tendermint::BlockHeight;
 use chain_core::state::{
-    account::CouncilNode, account::StakedStateAddress, tendermint::TendermintValidatorAddress,
-    tendermint::TendermintValidatorPubKey, tendermint::TendermintVotePower,
+    account::CouncilNode, account::StakedState, account::StakedStateAddress,
+    tendermint::TendermintValidatorAddress, tendermint::TendermintValidatorPubKey,
+    tendermint::TendermintVotePower,
 };
 use parity_scale_codec::{Decode, Encode, Error, Input, Output};
 use slab::Slab;
@@ -35,52 +35,6 @@ fn update_power_index(
         .or_insert_with(|| vec![id]);
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct Validator {
-    /// Council node information
-    pub node: CouncilNode,
-    /// Staking address
-    pub staking_address: StakedStateAddress,
-    /// Voting power, (Real voting power is returned by `voting_power` method).
-    pub bonded: Coin,
-    /// Jail status
-    pub jailed: bool,
-    /// Liveness measurements
-    pub liveness: LivenessTracker,
-    /// Slashing bookkeeping
-    pub slashing: Option<SlashingSchedule>,
-}
-
-impl Validator {
-    pub fn new(
-        node: CouncilNode,
-        staking_address: StakedStateAddress,
-        bonded: Coin,
-        block_signing_window: u16,
-    ) -> Validator {
-        Validator {
-            node,
-            staking_address,
-            bonded,
-            jailed: false,
-            liveness: LivenessTracker::new(block_signing_window),
-            slashing: None,
-        }
-    }
-
-    pub fn validator_address(&self) -> TendermintValidatorAddress {
-        (&self.node.consensus_pubkey).into()
-    }
-
-    pub fn voting_power(&self) -> TendermintVotePower {
-        if self.jailed {
-            TendermintVotePower::zero()
-        } else {
-            TendermintVotePower::from(self.bonded)
-        }
-    }
-}
-
 pub type ValidatorCandidate = (TendermintValidatorPubKey, TendermintVotePower);
 impl From<&Validator> for ValidatorCandidate {
     fn from(v: &Validator) -> ValidatorCandidate {
@@ -88,105 +42,65 @@ impl From<&Validator> for ValidatorCandidate {
     }
 }
 
-pub fn build_validator_update(
-    key: &TendermintValidatorPubKey,
-    power: TendermintVotePower,
-) -> ValidatorUpdate {
-    let mut result = ValidatorUpdate::new();
+// pub fn build_validator_update(
+//     key: &TendermintValidatorPubKey,
+//     power: TendermintVotePower,
+// ) -> ValidatorUpdate {
+//     let mut result = ValidatorUpdate::new();
+//
+//     let (keytype, key) = key.to_validator_update();
+//     let mut pubkey = PubKey::new();
+//     pubkey.set_field_type(keytype);
+//     pubkey.set_data(key);
+//
+//     result.set_pub_key(pubkey);
+//     result.set_power(power.into());
+//     result
+// }
 
-    let (keytype, key) = key.to_validator_update();
-    let mut pubkey = PubKey::new();
-    pubkey.set_field_type(keytype);
-    pubkey.set_data(key);
-
-    result.set_pub_key(pubkey);
-    result.set_power(power.into());
-    result
-}
-
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Encode, Decode)]
 pub struct ValidatorSet {
-    /// Validator set
-    validators: Slab<Validator>,
-
-    /// Index by staking address
-    by_staking_address: HashMap<StakedStateAddress, usize>,
     /// Index by validator address
-    by_validator_address: HashMap<TendermintValidatorAddress, usize>,
-    /// Sorted index by voting power
-    by_power: BTreeMap<TendermintVotePower, Vec<usize>>,
-}
-
-impl FromIterator<Validator> for ValidatorSet {
-    fn from_iter<I: IntoIterator<Item = Validator>>(iter: I) -> Self {
-        let mut set = ValidatorSet::new();
-        for v in iter {
-            set.insert(v);
-        }
-        set
-    }
-}
-
-impl Encode for ValidatorSet {
-    fn size_hint(&self) -> usize {
-        self.validators.iter().map(|(_, v)| v.size_hint()).sum()
-    }
-    fn encode_to<T: Output>(&self, dest: &mut T) {
-        (self.validators.len() as u64).encode_to(dest);
-        for (_, v) in self.validators.iter() {
-            v.encode_to(dest);
-        }
-    }
-}
-
-impl Decode for ValidatorSet {
-    fn decode<I: Input>(input: &mut I) -> Result<Self, Error> {
-        repeat(u64::decode(input)?)
-            .map(|_| Validator::decode(input))
-            .collect()
-    }
+    by_validator_address: BTreeMap<TendermintValidatorAddress, StakedStateAddress>,
+    /// Sorted by voting power
+    by_power: BTreeMap<TendermintVotePower, Vec<StakedStateAddress>>,
 }
 
 impl ValidatorSet {
     fn new() -> ValidatorSet {
         ValidatorSet {
-            validators: Slab::new(),
-            by_staking_address: HashMap::new(),
-            by_validator_address: HashMap::new(),
+            by_validator_address: BTreeMap::new(),
             by_power: BTreeMap::new(),
         }
     }
 
-    fn insert(&mut self, v: Validator) {
-        let id = self.validators.insert(v);
-        let v = &self.validators[id];
-        assert!(self
-            .by_validator_address
-            .insert(v.validator_address(), id)
-            .is_none());
-        assert!(self
-            .by_staking_address
-            .insert(v.staking_address, id)
-            .is_none());
+    fn insert(
+        &mut self,
+        validator_addr: TendermintValidatorAddress,
+        staking_addr: StakedStateAddress,
+        power: TendermintVotePower,
+    ) {
+        assert!(
+            self.by_validator_address
+                .insert(validator_addr, staking_addr)
+                .is_none(),
+            "validator already exists"
+        );
         self.by_power
-            .entry(v.voting_power())
-            .and_modify(|xs| xs.push(id))
-            .or_insert_with(|| vec![id]);
+            .entry(power)
+            .and_modify(|xs| xs.push(staking_addr))
+            .or_insert_with(|| vec![staking_addr]);
     }
 
-    pub fn remove(&mut self, validator_address: &TendermintValidatorAddress) -> Option<Validator> {
-        let id = self.by_validator_address.remove(validator_address);
-        if let Some(id) = id {
-            let validator = self.validators.remove(id);
-            self.by_staking_address
-                .remove(&validator.staking_address)
-                .unwrap();
-            let ids = self.by_power.get_mut(&validator.voting_power()).unwrap();
-            remove_item(ids, &id).unwrap();
-            Some(validator)
-        } else {
-            None
-        }
+    pub fn remove(&mut self, v: &StakedState) -> Option<()> {
+        let addr = v.validator_address().unwrap();
+        self.by_validator_address.remove(&addr).map(|_| {
+            remove_item(
+                self.by_power.get_mut(&v.voting_power()).unwrap(),
+                &v.address,
+            )
+            .unwrap();
+        })
     }
 
     pub fn get_by_staking(&self, staking: &StakedStateAddress) -> Option<&Validator> {
@@ -260,16 +174,47 @@ impl ValidatorSet {
             .flat_map(move |(power, ids)| ids.iter().map(move |id| (*power, &self.validators[*id])))
     }
 
-    /// Valid validator candidates
-    pub fn candidates(
+    pub fn iter_candidates(
         &self,
-        min_power: TendermintVotePower,
+        min_stake: Coin,
         max_count: usize,
-    ) -> Vec<ValidatorCandidate> {
+    ) -> impl Iterator<Item = &Validator> {
+        let min_power = TendermintVotePower::from(min_stake);
         self.sorted_by_power()
-            .filter_map(|(p, v)| if p > min_power { Some(v.into()) } else { None })
+            .filter_map(|(p, v)| if p >= min_power { Some(v) } else { None })
             .take(max_count)
+    }
+
+    /// Valid validator candidates
+    pub fn candidates(&self, min_stake: Coin, max_count: usize) -> Vec<ValidatorCandidate> {
+        self.iter_candidates(min_stake, max_count)
+            .map(|v| v.into())
             .collect()
+    }
+
+    fn update_liveness(
+        &mut self,
+        addr: &TendermintValidatorAddress,
+        height: BlockHeight,
+        signed: bool,
+    ) -> Option<()> {
+        if let Some(id) = self.by_validator_address.get(addr) {
+            let v = &mut self.validators[*id];
+            v.liveness.update(height, signed);
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    pub fn update_livenesses(
+        &mut self,
+        height: BlockHeight,
+        commit_info: &[(TendermintValidatorAddress, bool)],
+    ) {
+        for (addr, signed) in commit_info {
+            self.update_liveness(addr, height, *signed).unwrap();
+        }
     }
 }
 
