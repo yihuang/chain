@@ -1,0 +1,15 @@
+FROM rust:1.39.0 AS builder
+LABEL maintainer="calvin@crypto.com"
+
+RUN apt-get update -y && \
+    apt-get install cmake libgflags-dev libzmq3-dev pkg-config clang -y && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY ./vendor /src
+WORKDIR /src
+
+RUN mkdir .cargo
+RUN cargo vendor /vendor > .cargo/config
+
+ENV RUSTFLAGS "-Ctarget-feature=+aes,+sse2,+sse4.1,+ssse3"
+RUN cargo build

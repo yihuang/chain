@@ -20,3 +20,4 @@
 !Cargo.toml
 !/docker
 /docker/Dockerfile
+!/vendor
