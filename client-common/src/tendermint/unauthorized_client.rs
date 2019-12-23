@@ -21,7 +21,7 @@ impl Client for UnauthorizedClient {
         Err(ErrorKind::PermissionDenied.into())
     }
 
-    fn block_batch<'a, T: Iterator<Item = &'a u64>>(&self, _heights: T) -> Result<Vec<Block>> {
+    fn block_batch<T: Iterator<Item = u64>>(&self, _heights: T) -> Result<Vec<Block>> {
         Err(ErrorKind::PermissionDenied.into())
     }
 
@@ -44,7 +44,7 @@ impl Client for UnauthorizedClient {
         Err(ErrorKind::PermissionDenied.into())
     }
 
-    fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+    fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
         &self,
         _state: lite::TrustedState,
         _heights: T,

@@ -15,7 +15,7 @@ pub trait Client: Send + Sync + Clone {
     fn block(&self, height: u64) -> Result<Block>;
 
     /// Makes batched `block` call to tendermint
-    fn block_batch<'a, T: Iterator<Item = &'a u64>>(&self, heights: T) -> Result<Vec<Block>>;
+    fn block_batch<T: Iterator<Item = u64>>(&self, heights: T) -> Result<Vec<Block>>;
 
     /// Makes `block_results` call to tendermint
     fn block_results(&self, height: u64) -> Result<BlockResults>;
@@ -27,7 +27,7 @@ pub trait Client: Send + Sync + Clone {
     ) -> Result<Vec<BlockResults>>;
 
     /// Fetch continuous blocks and verify them.
-    fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+    fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
         &self,
         _state: lite::TrustedState,
         _heights: T,

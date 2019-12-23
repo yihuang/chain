@@ -451,10 +451,7 @@ mod test {
             unreachable!("block")
         }
 
-        fn block_batch<'a, T: Iterator<Item = &'a u64>>(
-            &self,
-            _heights: T,
-        ) -> CommonResult<Vec<Block>> {
+        fn block_batch<T: Iterator<Item = u64>>(&self, _heights: T) -> CommonResult<Vec<Block>> {
             unreachable!("block_batch")
         }
 
@@ -469,7 +466,7 @@ mod test {
             unreachable!("block_results_batch")
         }
 
-        fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+        fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
             &self,
             _state: lite::TrustedState,
             _heights: T,

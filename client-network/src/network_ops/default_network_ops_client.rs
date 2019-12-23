@@ -582,7 +582,7 @@ mod tests {
             unreachable!()
         }
 
-        fn block_batch<'a, T: Iterator<Item = &'a u64>>(&self, _heights: T) -> Result<Vec<Block>> {
+        fn block_batch<T: Iterator<Item = u64>>(&self, _heights: T) -> Result<Vec<Block>> {
             unreachable!()
         }
 
@@ -590,7 +590,7 @@ mod tests {
             unreachable!()
         }
 
-        fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+        fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
             &self,
             _state: lite::TrustedState,
             _heights: T,
@@ -624,7 +624,7 @@ mod tests {
             );
 
             Ok(AbciQuery {
-                value: Some(base64::encode(&staked_state.encode())),
+                value: Some(staked_state.encode()),
                 ..Default::default()
             })
         }
@@ -660,7 +660,7 @@ mod tests {
             unreachable!()
         }
 
-        fn block_batch<'a, T: Iterator<Item = &'a u64>>(&self, _heights: T) -> Result<Vec<Block>> {
+        fn block_batch<T: Iterator<Item = u64>>(&self, _heights: T) -> Result<Vec<Block>> {
             unreachable!()
         }
 
@@ -675,7 +675,7 @@ mod tests {
             unreachable!()
         }
 
-        fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+        fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
             &self,
             _state: lite::TrustedState,
             _heights: T,
@@ -698,7 +698,7 @@ mod tests {
             );
 
             Ok(AbciQuery {
-                value: Some(base64::encode(&staked_state.encode())),
+                value: Some(staked_state.encode()),
                 ..Default::default()
             })
         }

@@ -12,12 +12,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use base64;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tendermint::{lite::verifier, validator};
+use tendermint::{lite::types::Header, validator};
 use websocket::sender::Writer;
 use websocket::stream::sync::TcpStream;
 use websocket::OwnedMessage;
@@ -268,7 +267,7 @@ impl WebsocketRpcClient {
         }
     }
 
-    fn validators_batch<'a, T: Iterator<Item = &'a u64>>(
+    fn validators_batch<T: Iterator<Item = u64>>(
         &self,
         heights: T,
     ) -> Result<Vec<ValidatorsResponse>> {
@@ -278,10 +277,7 @@ impl WebsocketRpcClient {
         self.call_batch(&params)
     }
 
-    fn commit_batch<'a, T: Iterator<Item = &'a u64>>(
-        &self,
-        heights: T,
-    ) -> Result<Vec<CommitResponse>> {
+    fn commit_batch<T: Iterator<Item = u64>>(&self, heights: T) -> Result<Vec<CommitResponse>> {
         let params = heights
             .map(|height| ("commit", vec![json!(height.to_string())]))
             .collect::<Vec<(&str, Vec<Value>)>>();
@@ -309,7 +305,7 @@ impl Client for WebsocketRpcClient {
     }
 
     #[inline]
-    fn block_batch<'a, T: Iterator<Item = &'a u64>>(&self, heights: T) -> Result<Vec<Block>> {
+    fn block_batch<T: Iterator<Item = u64>>(&self, heights: T) -> Result<Vec<Block>> {
         let params = heights
             .map(|height| ("block", vec![json!(height.to_string())]))
             .collect::<Vec<(&str, Vec<Value>)>>();
@@ -366,33 +362,30 @@ impl Client for WebsocketRpcClient {
         Ok(result)
     }
 
-    fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+    fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
         &self,
         mut state: lite::TrustedState,
         heights: T,
     ) -> Result<(Vec<Block>, lite::TrustedState)> {
         let commits = self.commit_batch(heights.clone())?;
         let validators: Vec<validator::Set> = self
-            .validators_batch(heights.clone())?
+            .validators_batch(
+                heights
+                    .clone()
+                    .map(|n| n.checked_add(1).expect("block height overflow")),
+            )?
             .into_iter()
             .map(|rsp| validator::Set::new(rsp.validators))
             .collect();
         let blocks = self.block_batch(heights)?;
         for (commit, next_vals, block) in izip!(&commits, &validators, &blocks) {
-            verifier::verify_trusting(
-                block.header.clone(),
-                commit.signed_header.clone(),
-                state.validators.clone(),
-                next_vals.clone(),
-            )
-            .map_err(|err| {
-                Error::new(
+            if commit.signed_header.header.hash() != block.header.hash() {
+                return Err(Error::new(
                     ErrorKind::VerifyError,
-                    format!("block verify failed: {:?}", err),
-                )
-            })?;
-            state.header = Some(block.header.clone());
-            state.validators = next_vals.clone();
+                    "commit don't match block header",
+                ));
+            }
+            state = lite::verify_new_header(&state, &commit.signed_header, &next_vals)?;
         }
         Ok((blocks, state))
     }
@@ -416,8 +409,6 @@ impl Client for WebsocketRpcClient {
         rsps.into_iter()
             .map(|rsp| {
                 if let Some(value) = rsp.response.value {
-                    let value = base64::decode(&value)
-                        .chain(|| (ErrorKind::InvalidInput, "chain state decode failed"))?;
                     let state = serde_json::from_str(
                         &String::from_utf8(value)
                             .chain(|| (ErrorKind::InvalidInput, "chain state decode failed"))?,

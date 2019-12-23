@@ -13,8 +13,9 @@ use tendermint::amino_types::message::AminoMessage;
 use tendermint::lite::{Header, ValidatorSet};
 use tendermint::rpc::endpoint::status;
 use tendermint::{
-    account, amino_types, block, block::Height, chain, consensus, evidence, hash, node, public_key,
-    rpc::endpoint::commit::SignedHeader, validator, vote, Block, Hash, PublicKey, Signature, Time,
+    account, amino_types, block, block::signed_header::SignedHeader, block::Height, chain,
+    consensus, evidence, hash, node, public_key, validator, vote, Block, Hash, PublicKey,
+    Signature, Time,
 };
 
 use chain_abci::app::{compute_accounts_root, ChainNodeState, ValidatorState};
@@ -174,7 +175,7 @@ impl Node {
             id: self.node_id(),
             listen_addr: node::info::ListenAddress::new("tcp://0.0.0.0:26656".to_owned()),
             network: chain_id,
-            version: "0.32.7".parse().unwrap(),
+            version: serde_json::from_str("\"0.32.7\"").unwrap(),
             channels: serde_json::from_str("\"4020212223303800\"").unwrap(),
             moniker: self.name.parse().unwrap(),
             other: node::info::OtherInfo {
@@ -528,8 +529,8 @@ impl Client for GeneratorClient {
             .clone())
     }
 
-    fn block_batch<'a, T: Iterator<Item = &'a u64>>(&self, heights: T) -> Result<Vec<Block>> {
-        heights.map(|height| self.block(*height)).collect()
+    fn block_batch<T: Iterator<Item = u64>>(&self, heights: T) -> Result<Vec<Block>> {
+        heights.map(|height| self.block(height)).collect()
     }
 
     fn block_results(&self, height: u64) -> Result<BlockResults> {
@@ -549,7 +550,7 @@ impl Client for GeneratorClient {
         heights.map(|height| self.block_results(*height)).collect()
     }
 
-    fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+    fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
         &self,
         state: lite::TrustedState,
         heights: T,
@@ -617,7 +618,8 @@ fn gen_network_params(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tendermint::lite::verifier;
+    use client_common::tendermint::lite::{verify_new_header, TrustedState};
+    use tendermint::lite::types::TrustedState as _;
 
     #[test]
     fn check_lite_client() {
@@ -635,26 +637,9 @@ mod tests {
         let header1 = gen.signed_header(Height::default());
         let header2 = gen.signed_header(Height::default().increment());
 
-        assert!(
-            verifier::verify_trusting(
-                header1.header.clone(),
-                header1.clone(),
-                gen.validators.clone(),
-                gen.validators.clone(),
-            )
-            .is_ok(),
-            "verify failed"
-        );
-
-        assert!(
-            verifier::verify_trusting(
-                header2.header.clone(),
-                header2.clone(),
-                gen.validators.clone(),
-                gen.validators.clone(),
-            )
-            .is_ok(),
-            "verify failed"
-        );
+        let mut trusted_state = TrustedState::new(None, gen.validators.clone());
+        trusted_state =
+            verify_new_header(&trusted_state, &header1, &gen.validators).expect("verify failed");
+        verify_new_header(&trusted_state, &header2, &gen.validators).expect("verify failed");
     }
 }

@@ -321,10 +321,10 @@ impl<'a, S: SecureStorage, C: Client, D: TxDecryptor> WalletSyncerImpl<'a, S, C,
             }
 
             // Fetch batch details if it cannot be fast forwarded
-            let (blocks, trusted_state) = self
-                .env
-                .client
-                .block_batch_verified(self.sync_state.trusted_state.clone(), range.iter())?;
+            let (blocks, trusted_state) = self.env.client.block_batch_verified(
+                self.sync_state.trusted_state.clone(),
+                range.iter().cloned(),
+            )?;
             self.sync_state.trusted_state = trusted_state;
             let block_results = self.env.client.block_results_batch(range.iter())?;
             let states = self.env.client.query_state_batch(range.iter().cloned())?;

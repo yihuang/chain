@@ -120,10 +120,7 @@ impl RpcClient {
             .collect()
     }
 
-    fn commit_batch<'a, T: Iterator<Item = &'a u64>>(
-        &self,
-        heights: T,
-    ) -> Result<Vec<CommitResponse>> {
+    fn commit_batch<T: Iterator<Item = u64>>(&self, heights: T) -> Result<Vec<CommitResponse>> {
         let params: Vec<(&str, Vec<Value>)> = heights
             .map(|height| ("commit", vec![json!(height.to_string())]))
             .collect();
@@ -151,7 +148,7 @@ impl Client for RpcClient {
         Ok(self.call::<BlockResponse>("block", &params)?.block)
     }
 
-    fn block_batch<'a, T: Iterator<Item = &'a u64>>(&self, heights: T) -> Result<Vec<Block>> {
+    fn block_batch<T: Iterator<Item = u64>>(&self, heights: T) -> Result<Vec<Block>> {
         let params: Vec<(&str, Vec<Value>)> = heights
             .map(|height| ("block", vec![json!(height.to_string())]))
             .collect();
@@ -192,33 +189,26 @@ impl Client for RpcClient {
             .collect()
     }
 
-    fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+    fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
         &self,
         mut state: lite::TrustedState,
         heights: T,
     ) -> Result<(Vec<Block>, lite::TrustedState)> {
         let commits = self.commit_batch(heights.clone())?;
         let validators: Vec<validator::Set> = self
-            .validators_batch(heights.clone())?
+            .validators_batch(heights.map(|n| n.checked_add(1).expect("block height overflow")))?
             .into_iter()
             .map(|rsp| validator::Set::new(rsp.validators))
             .collect();
         let blocks = self.block_batch(heights)?;
         for (commit, next_vals, block) in izip!(&commits, &validators, &blocks) {
-            verifier::verify_trusting(
-                block.header.clone(),
-                commit.signed_header.clone(),
-                state.validators.clone(),
-                next_vals.clone(),
-            )
-            .map_err(|err| {
-                Error::new(
+            if commit.hash() != block.header.hash() {
+                return Err(Error::new(
                     ErrorKind::VerifyError,
-                    format!("block verify failed: {:?}", err),
-                )
-            })?;
-            state.header = Some(block.header.clone());
-            state.validators = next_vals.clone();
+                    "commit don't match block header",
+                ));
+            }
+            state = lite::verify_new_header(&state, &commit.signed_header, &next_vals)?;
         }
         Ok((blocks, state))
     }
@@ -280,10 +270,7 @@ impl Client for RpcClient {
                 let rsp =
                     opt.ok_or(Error::new(ErrorKind::InvalidInput, "chain state not found"))?;
                 if rsp.response.code.is_ok() {
-                    let value = base64
-                        .decode(&rsp.response.value)
-                        .chain(ErrorKind::InvalidInput, "chain state decode failed")?;
-                    let state = serde_json::from_str(String::from_utf8(value))
+                    let state = serde_json::from_str(String::from_utf8(&rsp.response.value))
                         .chain(ErrorKind::InvalidInput, "chain state decode failed")?;
                     Ok(state)
                 } else {

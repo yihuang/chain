@@ -123,8 +123,6 @@ where
 mod tests {
     use super::*;
 
-    use base64::encode;
-
     use chain_core::state::ChainState;
     use chain_core::tx::data::Tx;
     use chain_core::tx::witness::TxWitness;
@@ -161,7 +159,7 @@ mod tests {
             unreachable!()
         }
 
-        fn block_batch<'a, T: Iterator<Item = &'a u64>>(&self, _heights: T) -> Result<Vec<Block>> {
+        fn block_batch<T: Iterator<Item = u64>>(&self, _heights: T) -> Result<Vec<Block>> {
             unreachable!()
         }
 
@@ -176,7 +174,7 @@ mod tests {
             unreachable!()
         }
 
-        fn block_batch_verified<'a, T: Clone + Iterator<Item = &'a u64>>(
+        fn block_batch_verified<T: Clone + Iterator<Item = u64>>(
             &self,
             _state: lite::TrustedState,
             _heights: T,
@@ -197,7 +195,7 @@ mod tests {
                     .encode();
 
                     Ok(AbciQuery {
-                        value: Some(encode(&response)),
+                        value: Some(response),
                         ..Default::default()
                     })
                 }
@@ -208,7 +206,7 @@ mod tests {
                     .encode();
 
                     Ok(AbciQuery {
-                        value: Some(encode(&response)),
+                        value: Some(response),
                         ..Default::default()
                     })
                 }

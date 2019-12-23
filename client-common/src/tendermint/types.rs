@@ -1,7 +1,6 @@
 //! Structures used in Tendermint RPC
 mod block_results;
 
-use base64::decode;
 use parity_scale_codec::Decode;
 use serde::{Deserialize, Serialize};
 
@@ -115,14 +114,6 @@ pub trait AbciQueryExt {
 
 impl AbciQueryExt for AbciQuery {
     fn bytes(&self) -> Result<Vec<u8>> {
-        match &self.value {
-            None => Ok(vec![]),
-            Some(value) => Ok(decode(value).chain(|| {
-                (
-                    ErrorKind::DeserializationError,
-                    "Unable to decode base64 bytes on query result",
-                )
-            })?),
-        }
+        Ok(self.value.clone().unwrap_or_default())
     }
 }
