@@ -69,6 +69,13 @@ pub struct Options {
         help = "Number of block height to rollback the utxos in the pending transactions"
     )]
     pub block_height_ensure: u64,
+    #[structopt(
+        name = "insecure-tx-query",
+        short,
+        long,
+        help = "Don't verify tx-query server's certificate (only use for testing)"
+    )]
+    pub insecure_tx_query: bool,
 }
 
 #[allow(dead_code)]
