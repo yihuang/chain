@@ -3,7 +3,6 @@ mod memory_storage;
 #[cfg(feature = "sled")]
 mod sled_storage;
 mod unauthorized_storage;
-use parity_scale_codec::{Decode, Encode};
 
 pub use memory_storage::MemoryStorage;
 #[cfg(feature = "sled")]
@@ -60,25 +59,6 @@ pub trait Storage: Send + Sync + Clone {
 
     /// Returns all the keyspaces currently available.
     fn keyspaces(&self) -> Result<Vec<Vec<u8>>>;
-
-    /// load and deserialize object
-    fn load<T: Decode>(&self, keyspace: &str, key: &str) -> Result<Option<T>> {
-        if let Some(bytes) = self.get(keyspace, key)? {
-            Ok(Some(
-                T::decode(&mut bytes.as_slice())
-                    .err_kind(ErrorKind::DeserializationError, || {
-                        format!("decode: {}/{}", keyspace, key)
-                    })?,
-            ))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// serialize and save object
-    fn save<T: Encode>(&self, keyspace: &str, key: &str, value: &T) -> Result<()> {
-        self.set(keyspace, key, value.encode()).map(|_| ())
-    }
 }
 
 /// Interface for a generic key-value storage (with encryption)
@@ -112,37 +92,6 @@ pub trait SecureStorage: Storage {
         S: AsRef<[u8]>,
         K: AsRef<[u8]>,
         F: Fn(Option<&[u8]>) -> Result<Option<Vec<u8>>>;
-
-    /// Load and deserialize object
-    fn load_secure<T: Decode>(
-        &self,
-        keyspace: &str,
-        key: &str,
-        enckey: &SecKey,
-    ) -> Result<Option<T>> {
-        if let Some(bytes) = self.get_secure(keyspace, key, enckey)? {
-            Ok(Some(
-                T::decode(&mut bytes.as_slice())
-                    .err_kind(ErrorKind::DeserializationError, || {
-                        format!("decode: {}/{}", keyspace, key)
-                    })?,
-            ))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Serialize and save object
-    fn save_secure<T: Encode>(
-        &self,
-        keyspace: &str,
-        key: &str,
-        enckey: &SecKey,
-        value: &T,
-    ) -> Result<()> {
-        self.set_secure(keyspace, key, value.encode(), enckey)
-            .map(|_| ())
-    }
 }
 
 impl<T> SecureStorage for T

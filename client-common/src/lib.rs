@@ -8,6 +8,7 @@ pub mod multi_sig_address;
 pub mod seckey;
 pub mod storage;
 pub mod tendermint;
+pub mod value_storage;
 
 #[doc(inline)]
 pub use error::{Error, ErrorKind, Result, ResultExt};
@@ -21,6 +22,8 @@ pub use seckey::SecKey;
 pub use storage::{SecureStorage, Storage};
 #[doc(inline)]
 pub use transaction::{SignedTransaction, Transaction, TransactionInfo};
+#[doc(inline)]
+pub use value_storage::{SecureValueStorage, StorageValueType, ValueStorage};
 
 use secp256k1::{All, Secp256k1};
 

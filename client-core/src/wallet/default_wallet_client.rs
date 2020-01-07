@@ -22,7 +22,7 @@ use client_common::tendermint::types::{AbciQueryExt, BlockExt, BroadcastTxRespon
 use client_common::tendermint::{Client, UnauthorizedClient};
 use client_common::{
     seckey::derive_enckey, Error, ErrorKind, PrivateKey, PublicKey, Result, ResultExt, SecKey,
-    SignedTransaction, Storage, Transaction, TransactionInfo,
+    SecureValueStorage, SignedTransaction, Storage, Transaction, TransactionInfo,
 };
 
 use crate::service::*;
@@ -45,10 +45,9 @@ where
     C: Client,
     T: WalletTransactionBuilder,
 {
+    storage: S,
     key_service: KeyService<S>,
     hd_key_service: HdKeyService<S>,
-    wallet_service: WalletService<S>,
-    wallet_state_service: WalletStateService<S>,
     root_hash_service: RootHashService<S>,
     multi_sig_session_service: MultiSigSessionService<S>,
 
@@ -65,10 +64,9 @@ where
     /// Creates a new instance of `DefaultWalletClient`
     pub fn new(storage: S, tendermint_client: C, transaction_builder: T) -> Self {
         Self {
+            storage: storage.clone(),
             key_service: KeyService::new(storage.clone()),
             hd_key_service: HdKeyService::new(storage.clone()),
-            wallet_service: WalletService::new(storage.clone()),
-            wallet_state_service: WalletStateService::new(storage.clone()),
             root_hash_service: RootHashService::new(storage.clone()),
             multi_sig_session_service: MultiSigSessionService::new(storage),
             tendermint_client,
@@ -99,7 +97,18 @@ where
 {
     #[inline]
     fn wallets(&self) -> Result<Vec<String>> {
-        self.wallet_service.names()
+        let keys = self.storage.keys(Wallet::keyspace())?;
+
+        keys.into_iter()
+            .map(|bytes| {
+                String::from_utf8(bytes).chain(|| {
+                    (
+                        ErrorKind::DeserializationError,
+                        "Unable to deserialize wallet names in storage",
+                    )
+                })
+            })
+            .collect()
     }
 
     fn new_wallet(
@@ -122,9 +131,9 @@ where
                 self.key_service
                     .add_keypair(&private_key, &view_key, &enckey)?;
 
-                self.wallet_service.create(name, &enckey, view_key)?;
-
-                Ok((enckey, None))
+                self.storage
+                    .create_value_secure(name, &Wallet::new(view_key), &enckey)
+                    .map(|_| None)
             }
             WalletKind::HD => {
                 let mnemonic = Mnemonic::new();
@@ -138,7 +147,8 @@ where
                 self.key_service
                     .add_keypair(&private_key, &public_key, &enckey)?;
 
-                self.wallet_service.create(name, &enckey, public_key)?;
+                self.storage
+                    .create_value_secure(name, &Wallet::new(public_key), &enckey)?;
 
                 Ok((enckey, Some(mnemonic)))
             }
@@ -166,8 +176,8 @@ where
         self.key_service
             .add_keypair(&private_key, &public_key, &enckey)?;
 
-        self.wallet_service.create(name, &enckey, public_key)?;
-        Ok(enckey)
+        self.storage
+            .create_value_secure(name, &Wallet::new(public_key), &enckey)
     }
 
     fn restore_basic_wallet(
@@ -184,46 +194,55 @@ where
 
         let view_key = PublicKey::from(view_key_priv);
         self.key_service
-            .add_keypair(&view_key_priv, &view_key, &enckey)?;
-        self.wallet_service.create(name, &enckey, view_key)?;
-        Ok(enckey)
-    }
-
-    fn auth_token(&self, name: &str, passphrase: &SecUtf8) -> Result<SecKey> {
-        let enckey = derive_enckey(passphrase, name).err_kind(ErrorKind::InvalidInput, || {
-            "unable to derive encryption key from passphrase"
-        })?;
-
-        // test validity of enckey
-        self.view_key(name, &enckey)?;
-        Ok(enckey)
+            .add_keypair(&view_key_priv, &view_key, passphrase)?;
+        self.storage
+            .create_value_secure(name, &Wallet::new(view_key), passphrase)
     }
 
     #[inline]
-    fn view_key(&self, name: &str, enckey: &SecKey) -> Result<PublicKey> {
-        self.wallet_service.view_key(name, enckey)
+    fn view_key(&self, name: &str, passphrase: &SecUtf8) -> Result<PublicKey> {
+        Ok(self.storage.get_value_secure(name, passphrase)?.view_key)
     }
 
     #[inline]
     fn view_key_private(&self, name: &str, enckey: &SecKey) -> Result<PrivateKey> {
         self.key_service
-            .private_key(&self.wallet_service.view_key(name, enckey)?, enckey)?
+            .private_key(
+                &self
+                    .storage
+                    .get_value_secure::<Wallet>(name, passphrase)?
+                    .err_kind(ErrorKind::InvalidInput, || "Wallet not found")?
+                    .view_key,
+                passphrase,
+            )?
             .err_kind(ErrorKind::InvalidInput, || "private view key not found")
     }
 
     #[inline]
-    fn public_keys(&self, name: &str, enckey: &SecKey) -> Result<BTreeSet<PublicKey>> {
-        self.wallet_service.public_keys(name, enckey)
+    fn public_keys(&self, name: &str, passphrase: &SecUtf8) -> Result<BTreeSet<PublicKey>> {
+        Ok(self
+            .storage
+            .get_value_secure::<Wallet>(name, passphrase)?
+            .err_kind(ErrorKind::InvalidInput, || "Wallet not found")?
+            .public_keys)
     }
 
     #[inline]
-    fn staking_keys(&self, name: &str, enckey: &SecKey) -> Result<BTreeSet<PublicKey>> {
-        self.wallet_service.staking_keys(name, enckey)
+    fn staking_keys(&self, name: &str, passphrase: &SecUtf8) -> Result<BTreeSet<PublicKey>> {
+        Ok(self
+            .storage
+            .get_value_secure::<Wallet>(name, passphrase)?
+            .err_kind(ErrorKind::InvalidInput, || "Wallet not found")?
+            .staking_keys)
     }
 
     #[inline]
-    fn root_hashes(&self, name: &str, enckey: &SecKey) -> Result<BTreeSet<H256>> {
-        self.wallet_service.root_hashes(name, enckey)
+    fn root_hashes(&self, name: &str, passphrase: &SecUtf8) -> Result<BTreeSet<H256>> {
+        Ok(self
+            .storage
+            .get_value_secure::<Wallet>(name, passphrase)?
+            .err_kind(ErrorKind::InvalidInput, || "Wallet not found")?
+            .root_hashes)
     }
 
     #[inline]
@@ -232,12 +251,24 @@ where
         name: &str,
         enckey: &SecKey,
     ) -> Result<BTreeSet<StakedStateAddress>> {
-        self.wallet_service.staking_addresses(name, enckey)
+        Ok(self
+            .storage
+            .get_value_secure::<Wallet>(name, passphrase)?
+            .err_kind(ErrorKind::InvalidInput, || "Wallet not found")?
+            .staking_addresses())
     }
 
     #[inline]
-    fn transfer_addresses(&self, name: &str, enckey: &SecKey) -> Result<BTreeSet<ExtendedAddr>> {
-        self.wallet_service.transfer_addresses(name, enckey)
+    fn transfer_addresses(
+        &self,
+        name: &str,
+        passphrase: &SecUtf8,
+    ) -> Result<BTreeSet<ExtendedAddr>> {
+        Ok(self
+            .storage
+            .get_value_secure::<Wallet>(name, passphrase)?
+            .err_kind(ErrorKind::InvalidInput, || "Wallet not found")?
+            .transfer_addresses())
     }
 
     #[inline]
@@ -247,8 +278,12 @@ where
         enckey: &SecKey,
         redeem_address: &RedeemAddress,
     ) -> Result<Option<PublicKey>> {
-        self.wallet_service
-            .find_staking_key(name, enckey, redeem_address)
+        Ok(self
+            .storage
+            .get_value_secure::<Wallet>(name, passphrase)?
+            .err_kind(ErrorKind::InvalidInput, || "Wallet not found")?
+            .find_staking_key(redeem_address)
+            .copied())
     }
 
     #[inline]
@@ -258,7 +293,12 @@ where
         enckey: &SecKey,
         address: &ExtendedAddr,
     ) -> Result<Option<H256>> {
-        self.wallet_service.find_root_hash(name, enckey, address)
+        Ok(self
+            .storage
+            .get_value_secure::<Wallet>(name, passphrase)?
+            .err_kind(ErrorKind::InvalidInput, || "Wallet not found")?
+            .find_root_hash(address)
+            .copied())
     }
 
     #[inline]
@@ -295,8 +335,10 @@ where
         self.key_service
             .add_keypair(&private_key, &public_key, enckey)?;
 
-        self.wallet_service
-            .add_public_key(name, enckey, &public_key)?;
+        self.storage
+            .modify_value_secure_strict(name, passphrase, |wallet: &mut Wallet| {
+                wallet.add_public_key(public_key)
+            })?;
 
         Ok(public_key)
     }
@@ -315,8 +357,10 @@ where
         self.key_service
             .add_keypair(&private_key, &staking_key, enckey)?;
 
-        self.wallet_service
-            .add_staking_key(name, enckey, &staking_key)?;
+        self.storage
+            .modify_value_secure_strict(name, passphrase, |wallet: &mut Wallet| {
+                wallet.add_staking_key(staking_key)
+            })?;
 
         Ok(StakedStateAddress::BasicRedeem(RedeemAddress::from(
             &staking_key,
@@ -337,8 +381,10 @@ where
         self.key_service
             .add_keypair(&private_key, &public_key, enckey)?;
 
-        self.wallet_service
-            .add_public_key(name, enckey, &public_key)?;
+        self.storage
+            .modify_value_secure_strict(name, passphrase, |wallet: &mut Wallet| {
+                Ok(wallet.add_public_key(public_key.clone()))
+            })?;
 
         self.new_multisig_transfer_address(name, enckey, vec![public_key.clone()], public_key, 1)
     }
@@ -349,8 +395,10 @@ where
         enckey: &SecKey,
         public_key: &PublicKey,
     ) -> Result<StakedStateAddress> {
-        self.wallet_service
-            .add_staking_key(name, enckey, public_key)?;
+        self.storage
+            .modify_value_secure_strict(name, passphrase, |wallet: &mut Wallet| {
+                Ok(wallet.add_staking_key(public_key))
+            })?;
 
         Ok(StakedStateAddress::BasicRedeem(RedeemAddress::from(
             public_key,
@@ -414,9 +462,14 @@ where
         }
     }
 
-    fn required_cosigners(&self, name: &str, enckey: &SecKey, root_hash: &H256) -> Result<usize> {
-        // To verify if the enckey is correct or not
-        self.wallet_service.view_key(name, enckey)?;
+    fn required_cosigners(
+        &self,
+        name: &str,
+        passphrase: &SecUtf8,
+        root_hash: &H256,
+    ) -> Result<usize> {
+        // To verify if the passphrase is correct or not
+        self.storage.get_value_secure::<Wallet>(name, passphrase)?;
 
         self.root_hash_service.required_signers(root_hash, enckey)
     }
@@ -424,8 +477,13 @@ where
     #[inline]
     fn balance(&self, name: &str, enckey: &SecKey) -> Result<WalletBalance> {
         // Check if wallet exists
-        self.wallet_service.view_key(name, enckey)?;
-        self.wallet_state_service.get_balance(name, enckey)
+        self.storage.get_value_secure::<Wallet>(name, passphrase)?;
+        Ok(self
+            .storage
+            .get_value_secure(name, passphrase)?
+            .map(|state: WalletState| state.get_balance())
+            .transpose()?
+            .unwrap_or_default())
     }
 
     fn history(
@@ -439,15 +497,15 @@ where
         // Check if wallet exists
         self.wallet_service.view_key(name, enckey)?;
 
-        let history = self
-            .wallet_state_service
-            .get_transaction_history(name, enckey, reversed)?
+        Ok(self
+            .storage
+            .get_value_secure::<WalletState>(name, passphrase)?
+            .unwrap_or_default()
+            .get_transaction_history(reversed)
             .filter(|change| BalanceChange::NoChange != change.balance_change)
             .skip(offset)
             .take(limit)
-            .collect::<Vec<_>>();
-
-        Ok(history)
+            .collect::<Vec<_>>())
     }
 
     fn unspent_transactions(&self, name: &str, enckey: &SecKey) -> Result<UnspentTransactions> {
@@ -455,12 +513,12 @@ where
         self.wallet_service.view_key(name, enckey)?;
 
         let unspent_transactions = self
-            .wallet_state_service
-            .get_unspent_transactions(name, enckey, false)?;
+            .storage
+            .get_value_secure::<WalletState>(name, passphrase)?
+            .map(|state| state.get_unspent_transactions(false).into_iter().collect())
+            .unwrap_or_default();
 
-        Ok(UnspentTransactions::new(
-            unspent_transactions.into_iter().collect(),
-        ))
+        Ok(UnspentTransactions::new(unspent_transactions))
     }
 
     fn has_unspent_transactions(
@@ -472,8 +530,11 @@ where
         // Check if wallet exists
         self.wallet_service.view_key(name, enckey)?;
 
-        self.wallet_state_service
-            .has_unspent_transactions(name, enckey, inputs)
+        Ok(self
+            .storage
+            .get_value_secure::<WalletState>(name, passphrase)?
+            .map(|state| state.has_unspent_transactions(inputs))
+            .unwrap_or(false))
     }
 
     #[inline]
@@ -481,15 +542,13 @@ where
         // Check if wallet exists
         self.wallet_service.view_key(name, enckey)?;
 
-        self.wallet_state_service
-            .get_output(name, enckey, input)
-            .and_then(|optional| {
-                optional.chain(|| {
-                    (
-                        ErrorKind::InvalidInput,
-                        "Output details not found for given transaction input",
-                    )
-                })
+        self.storage
+            .get_value_secure::<WalletState>(name, passphrase)?
+            .map(|state| state.get_output(input))
+            .transpose()?
+            .flatten()
+            .err_kind(ErrorKind::InvalidInput, || {
+                "Output details not found for given transaction input"
             })
     }
 
@@ -530,15 +589,17 @@ where
         let tx = self.transaction_builder.decrypt_tx(txid, &private_key)?;
         // get the block height
         let tx_change = self
-            .wallet_state_service
-            .get_transaction_history(name, enckey, false)?
-            .filter(|change| BalanceChange::NoChange != change.balance_change)
-            .find(|tx_change| tx_change.transaction_id == tx.id())
-            .chain(|| {
-                (
-                    ErrorKind::InvalidInput,
-                    "no transaction find by transaction id",
-                )
+            .storage
+            .get_value_secure::<WalletState>(name, passphrase)?
+            .map(|state| {
+                state
+                    .get_transaction_history(false)
+                    .filter(|change| BalanceChange::NoChange != change.balance_change)
+                    .find(|tx_change| tx_change.transaction_id == tx.id())
+            })
+            .flatten()
+            .err_kind(ErrorKind::InvalidInput, || {
+                "no transaction find by transaction id"
             })?;
 
         let tx_info = TransactionInfo {
@@ -598,8 +659,10 @@ where
         )
         .chain(|| (ErrorKind::InvalidInput, "import error"))?;
 
-        self.wallet_state_service
-            .apply_memento(name, enckey, &memento)?;
+        self.storage
+            .modify_value_secure(name, passphrase, |state: &mut WalletState| {
+                state.apply_memento(&memento)
+            })?;
         Ok(imported_value)
     }
 
@@ -618,8 +681,10 @@ where
     ) -> Result<()> {
         let mut wallet_state_memento = WalletStateMemento::default();
         wallet_state_memento.add_pending_transaction(tx_id, tx_pending);
-        self.wallet_state_service
-            .apply_memento(name, enckey, &wallet_state_memento)
+        self.storage
+            .modify_value_secure(name, passphrase, |state: &mut WalletState| {
+                state.apply_memento(&wallet_state_memento)
+            })
     }
 }
 

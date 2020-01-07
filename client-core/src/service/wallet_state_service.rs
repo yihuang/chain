@@ -5,13 +5,14 @@ use chain_core::{
     init::coin::{sum_coins, CoinError},
     tx::data::{input::TxoPointer, output::TxOut, TxId},
 };
-use client_common::{Error, ErrorKind, Result, ResultExt, SecKey, SecureStorage, Storage};
+use client_common::{
+    Error, ErrorKind, Result, ResultExt, SecureValueStorage, Storage, StorageValueType,
+    ValueStorage, SecKey
+};
 
 use crate::types::{TransactionChange, TransactionPending, WalletBalance};
 
-/// key space of wallet state
-const KEYSPACE: &str = "core_wallet_state";
-
+<<<<<<< Updated upstream
 /// Maintains mapping `wallet-name -> wallet-state`
 #[derive(Debug, Default, Clone)]
 pub struct WalletStateService<S>
@@ -34,7 +35,7 @@ where
     /// Clears all storage
     #[inline]
     pub fn clear(&self) -> Result<()> {
-        self.storage.clear(KEYSPACE)
+        self.storage.clear_values::<WalletState>()
     }
 
     /// Returns `true` if given transaction inputs are present in the list of unspent transactions, `false` otherwise
@@ -118,42 +119,6 @@ where
             .chain(|| (ErrorKind::StorageError, "Calculate balance error"))?;
         Ok(balance)
     }
-
-    fn modify_state<F>(&self, name: &str, enckey: &SecKey, f: F) -> Result<()>
-    where
-        F: Fn(&mut WalletState) -> Result<()>,
-    {
-        self.storage
-            .fetch_and_update_secure(KEYSPACE, name, enckey, |bytes_optional| {
-                let mut wallet_state = parse_wallet_state(name, bytes_optional)?;
-                f(&mut wallet_state)?;
-                Ok(Some(wallet_state.encode()))
-            })
-            .map(|_| ())
-    }
-
-    /// Applies and commits wallet state memento
-    pub fn apply_memento(
-        &self,
-        name: &str,
-        enckey: &SecKey,
-        memento: &WalletStateMemento,
-    ) -> Result<()> {
-        self.modify_state(name, enckey, |state| state.apply_memento(memento))
-    }
-
-    /// Deletes all the state data corresponding to a wallet
-    #[inline]
-    pub fn delete_wallet_state(&self, name: &str, enckey: &SecKey) -> Result<()> {
-        // Check if the enckey is correct
-        let _ = self.get_wallet_state(name, enckey)?;
-        self.storage.delete(KEYSPACE, name).map(|_| ())
-    }
-
-    #[inline]
-    fn get_wallet_state(&self, name: &str, enckey: &SecKey) -> Result<WalletState> {
-        Ok(load_wallet_state(&self.storage, name, enckey)?.unwrap_or_default())
-    }
 }
 
 fn parse_wallet_state<T: AsRef<[u8]>>(
@@ -221,6 +186,25 @@ pub fn delete_wallet_state<S: Storage>(storage: &S, name: &str) -> Result<()> {
     Ok(())
 }
 
+=======
+    pub fn delete_wallet_state(&self, name: &str, passphrase: &SecUtf8) -> Result<()> {
+        // Check if the passphrase is correct
+        let _ = self.get_wallet_state(name, passphrase)?;
+        self.storage.delete_value::<WalletState>(name)
+    }
+
+    #[inline]
+    fn get_wallet_state(&self, name: &str, passphrase: &SecUtf8) -> Result<WalletState> {
+        Ok(self
+            .storage
+            .get_value_secure(name, passphrase)?
+            .unwrap_or_default())
+    }
+}
+
+>>>>>>> value storage
+=======
+>>>>>>> Stashed changes
 /// Wallet state
 #[derive(Debug, Encode, Decode)]
 pub struct WalletState {
@@ -243,6 +227,13 @@ impl Default for WalletState {
             transaction_history: Default::default(),
             transaction_log: vec![],
         }
+    }
+}
+
+impl StorageValueType for WalletState {
+    #[inline]
+    fn keyspace() -> &'static str {
+        "core_wallet_state"
     }
 }
 
@@ -375,6 +366,42 @@ impl WalletState {
             Ok(None)
         }
     }
+
+    /// Returns currently stored transaction history for given wallet
+    #[inline]
+    pub fn get_transaction_history(
+        &self,
+        reversed: bool,
+    ) -> Box<dyn Iterator<Item = TransactionChange>> {
+        let mut history = self.transaction_history.clone();
+        let get_tx = move |txid| history.remove(&txid);
+        let iter = self.transaction_log.into_iter();
+        if reversed {
+            Box::new(iter.rev().filter_map(get_tx))
+        } else {
+            Box::new(iter.filter_map(get_tx))
+        }
+    }
+
+    /// Returns currently stored unspent transactions for given wallet
+    /// if include_pending is true, get all the unspent transactions, else just available transactions
+    #[inline]
+    pub fn get_unspent_transactions(&self, include_pending: bool) -> BTreeMap<TxoPointer, TxOut> {
+        if include_pending {
+            self.unspent_transactions.clone()
+        } else {
+            self.get_available_transactions()
+        }
+    }
+
+    /// Returns `true` if given transaction inputs are present in the list of unspent transactions, `false` otherwise
+    pub fn has_unspent_transactions(&self, inputs: &[TxoPointer]) -> bool {
+        let unspent_transactions = self.get_unspent_transactions(false);
+
+        inputs
+            .iter()
+            .all(|input| unspent_transactions.contains_key(input))
+    }
 }
 
 /// A memento for wallet state used for batch operations on wallet state service
@@ -443,39 +470,34 @@ mod tests {
     use chain_core::init::coin::Coin;
 
     #[test]
-    fn check_wallet_state_service_flow() {
+    fn check_wallet_state_flow() {
         let storage = MemoryStorage::default();
-        let wallet_state_service = WalletStateService::new(storage);
-
         let name = "name";
         let enckey = &derive_enckey(&SecUtf8::from("passphrase"), name).unwrap();
 
+        let mut wallet_state: WalletState = storage
+            .get_value_secure(name, passphrase)
+            .unwrap()
+            .unwrap_or_default();
+
         // Check empty state
 
-        assert_eq!(
-            0,
-            wallet_state_service
-                .get_unspent_transactions(name, enckey, false)
-                .unwrap()
-                .len()
-        );
+        assert_eq!(0, wallet_state.get_unspent_transactions(false).len());
 
         assert_eq!(
             0,
-            wallet_state_service
-                .get_transaction_history(name, enckey, false)
+            wallet_state
+                .clone()
+                .into_transaction_history(false)
                 .unwrap()
                 .count()
         );
 
-        assert!(wallet_state_service
-            .get_transaction_change(name, enckey, &[0; 32])
-            .unwrap()
-            .is_none());
+        assert!(wallet_state.get_transaction_change(&[0; 32]).is_none());
 
         assert_eq!(
             WalletBalance::default(),
-            wallet_state_service.get_balance(name, enckey).unwrap()
+            wallet_state.get_balance().unwrap()
         );
 
         // Add an unspent transaction and check if it is added
@@ -486,32 +508,16 @@ mod tests {
             TxOut::new(ExtendedAddr::OrTree([0; 32]), Coin::zero()),
         );
 
-        assert!(wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .is_ok());
+        assert!(wallet_state.apply_memento(&memento).is_ok());
 
-        assert_eq!(
-            1,
-            wallet_state_service
-                .get_unspent_transactions(name, enckey, false)
-                .unwrap()
-                .len()
-        );
+        assert_eq!(1, wallet_state.get_unspent_transactions(false).len());
 
         // Remove previously added unspent transaction and check if it is removed
         let mut memento = WalletStateMemento::default();
         memento.remove_unspent_transaction(TxoPointer::new([0; 32], 0));
-        assert!(wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .is_ok());
+        assert!(wallet_state.apply_memento(&memento).is_ok());
 
-        assert_eq!(
-            0,
-            wallet_state_service
-                .get_unspent_transactions(name, enckey, false)
-                .unwrap()
-                .len()
-        );
+        assert_eq!(0, wallet_state.get_unspent_transactions(false).len());
 
         // Add a pending transaction
 
@@ -524,16 +530,20 @@ mod tests {
                 return_amount: Coin::unit(),
             },
         );
-        assert!(wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .is_ok());
+        assert!(wallet_state.apply_memento(&memento).is_ok());
         // remove the previous added pending transaction
         let mut memento = WalletStateMemento::default();
         memento.remove_pending_transaction([0; 32]);
-        assert!(wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .is_ok());
-        let wallet_state = wallet_state_service.get_wallet_state(name, enckey).unwrap();
+        assert!(wallet_state.apply_memento(&memento).is_ok());
+
+        storage
+            .set_value_secure(name, passphrase, &wallet_state)
+            .unwrap();
+
+        let mut wallet_state: WalletState = storage
+            .get_value_secure(name, passphrase)
+            .unwrap()
+            .unwrap_or_default();
         assert_eq!(0, wallet_state.pending_transactions.len());
 
         // Add a transaction change (with incoming balance) and check if it is added and also new wallet balance
@@ -552,27 +562,10 @@ mod tests {
             block_time: Time::from_str("2019-04-09T09:38:41.735577Z").unwrap(),
         });
 
-        assert!(wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .is_ok());
-
-        assert_eq!(
-            1,
-            wallet_state_service
-                .get_transaction_history(name, enckey, false)
-                .unwrap()
-                .count()
-        );
-
-        assert!(wallet_state_service
-            .get_transaction_change(name, enckey, &[0; 32])
-            .unwrap()
-            .is_some());
-
-        assert!(wallet_state_service
-            .get_transaction_change(name, enckey, &[1; 32])
-            .unwrap()
-            .is_none());
+        assert!(wallet_state.apply_memento(&memento).is_ok());
+        assert_eq!(1, wallet_state.get_transaction_history(false).count());
+        assert!(wallet_state.get_transaction_change(&[0; 32]).is_some());
+        assert!(wallet_state.get_transaction_change(&[1; 32]).is_none());
 
         // Add a transaction change (with outgoing balance) and check if it is added and also new wallet balance
 
@@ -591,27 +584,16 @@ mod tests {
             block_time: Time::from_str("2019-04-09T09:38:41.735577Z").unwrap(),
         });
 
-        assert!(wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .is_ok());
+        assert!(wallet_state.apply_memento(&memento).is_ok());
 
-        assert_eq!(
-            2,
-            wallet_state_service
-                .get_transaction_history(name, enckey, false)
-                .unwrap()
-                .count()
-        );
+        assert_eq!(2, wallet_state.get_transaction_history(false).count());
 
-        assert!(wallet_state_service
-            .get_transaction_change(name, enckey, &[1; 32])
-            .unwrap()
-            .is_some());
+        assert!(wallet_state.get_transaction_change(&[1; 32]).is_some());
     }
 
     fn prepare_wallet_storage(name: &str, enckey: &SecKey) -> MemoryStorage {
         let storage = MemoryStorage::default();
-        let wallet_state_service = WalletStateService::new(storage.clone());
+        let mut wallet_state = WalletState::new();
 
         let mut memento = WalletStateMemento::default();
         let tx_pointer = |n: u8, i: usize| TxoPointer::new([n; 32], i);
@@ -620,11 +602,11 @@ mod tests {
         // Add two unspent transaction
         memento.add_unspent_transaction(tx_pointer(0, 0), output(0, 100));
         memento.add_unspent_transaction(tx_pointer(0, 1), output(0, 40));
-        wallet_state_service
-            .apply_memento(name, enckey, &memento)
+        wallet_state
+            .apply_memento(name, passphrase, &memento)
             .unwrap();
         assert_eq!(
-            wallet_state_service.get_balance(name, enckey).unwrap(),
+            wallet_state.get_balance().unwrap(),
             WalletBalance {
                 total: Coin::new(140).unwrap(),
                 available: Coin::new(140).unwrap(),
@@ -642,12 +624,10 @@ mod tests {
                 return_amount: Coin::new(50).unwrap(),
             },
         );
-        wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .unwrap();
+        wallet_state.apply_memento(&memento).unwrap();
 
         assert_eq!(
-            wallet_state_service.get_balance(name, enckey).unwrap(),
+            wallet_state.get_balance().unwrap(),
             WalletBalance {
                 total: Coin::new(90).unwrap(),
                 available: Coin::new(40).unwrap(),
@@ -656,21 +636,22 @@ mod tests {
         );
 
         // now the available utxo is only the second one
-        let unspent_tx = wallet_state_service
-            .get_unspent_transactions(name, enckey, false)
-            .unwrap();
+        let unspent_tx = wallet_state.get_unspent_transactions(false).unwrap();
         let mut target = BTreeMap::new();
         target.insert(tx_pointer(0, 1), output(0, 40));
         assert_eq!(unspent_tx, target);
+        storage
+            .set_value_secure(name, passphrase, &wallet_state)
+            .unwrap();
         storage
     }
 
     #[test]
     fn test_sync_and_get_balance() {
         let name = "name";
-        let enckey = &derive_enckey(&SecUtf8::from("passphrase"), name).unwrap();
-        let storage = prepare_wallet_storage(name, enckey);
-        let wallet_state_service = WalletStateService::new(storage);
+        let passphrase = &SecUtf8::from("passphrase");
+        let storage = prepare_wallet_storage(name, passphrase);
+        let mut wallet_state: WalletState = storage.get_value_secure(name, passphrase).unwrap();
         let tx_pointer = |n: u8, i: usize| TxoPointer::new([n; 32], i);
         let output =
             |n: u8, m: u64| TxOut::new(ExtendedAddr::OrTree([n; 32]), Coin::new(m).unwrap());
@@ -680,21 +661,17 @@ mod tests {
         memento.remove_unspent_transaction(tx_pointer(0, 0));
         // and add the returned utxo
         memento.add_unspent_transaction(tx_pointer(1, 0), output(0, 50));
-        wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .unwrap();
+        wallet_state.apply_memento(&memento).unwrap();
         // now, we can get the balance
         assert_eq!(
-            wallet_state_service.get_balance(name, enckey).unwrap(),
+            wallet_state.get_balance().unwrap(),
             WalletBalance {
                 total: Coin::new(90).unwrap(),
                 available: Coin::new(90).unwrap(),
                 pending: Coin::zero(),
             }
         );
-        let unspent_tx = wallet_state_service
-            .get_unspent_transactions(name, enckey, false)
-            .unwrap();
+        let unspent_tx = wallet_state.get_unspent_transactions(false);
         assert_eq!(unspent_tx.len(), 2);
     }
 
@@ -702,12 +679,11 @@ mod tests {
     fn test_rollback_and_get_balance() {
         let block_height_ensure = 50;
         let name = "name";
-        let enckey = &derive_enckey(&SecUtf8::from("passphrase"), name).unwrap();
-        let storage = prepare_wallet_storage(name, enckey);
-        let wallet_state_service = WalletStateService::new(storage);
+        let passphrase = &SecUtf8::from("passphrase");
+        let storage = prepare_wallet_storage(name, passphrase);
+        let mut wallet_state: WalletState = storage.get_value_secure(name, passphrase).unwrap();
         // assume that broadcast failed, then we should rollback
         let current_height = 2 + block_height_ensure;
-        let wallet_state = wallet_state_service.get_wallet_state(name, enckey).unwrap();
         let rollback_txids =
             wallet_state.get_rollback_pending_tx(current_height, block_height_ensure);
         assert_eq!(rollback_txids, vec![[1; 32]]);
@@ -715,11 +691,9 @@ mod tests {
         for txid in rollback_txids {
             memento.remove_pending_transaction(txid);
         }
-        wallet_state_service
-            .apply_memento(name, enckey, &memento)
-            .unwrap();
+        wallet_state.apply_memento(&memento).unwrap();
         assert_eq!(
-            wallet_state_service.get_balance(name, enckey).unwrap(),
+            wallet_state.get_balance().unwrap(),
             WalletBalance {
                 total: Coin::new(140).unwrap(),
                 available: Coin::new(140).unwrap(),

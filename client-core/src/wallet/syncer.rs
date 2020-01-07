@@ -11,11 +11,11 @@ use chain_tx_filter::BlockFilter;
 use client_common::tendermint::types::{Block, BlockExt, BlockResults, Status, Time};
 use client_common::tendermint::Client;
 use client_common::{
-    Error, ErrorKind, PrivateKey, Result, ResultExt, SecKey, SecureStorage, Transaction,
+    Error, ErrorKind, PrivateKey, Result, ResultExt, SecKey, SecureStorage, SecureValueStorage,
+    Transaction, ValueStorage,
 };
 
 use super::syncer_logic::handle_blocks;
-use crate::service;
 use crate::service::{KeyService, SyncState, Wallet, WalletState, WalletStateMemento};
 use crate::TransactionObfuscation;
 
@@ -151,8 +151,8 @@ where
 
     /// Delete sync state and wallet state.
     pub fn reset_state(&self) -> Result<()> {
-        service::delete_sync_state(&self.storage, &self.name)?;
-        service::delete_wallet_state(&self.storage, &self.name)?;
+        self.storage.delete_value::<SyncState>(&self.name)?;
+        self.storage.delete_value::<WalletState>(&self.name)?;
         Ok(())
     }
 
@@ -163,7 +163,8 @@ where
 }
 
 fn load_view_key<S: SecureStorage>(storage: &S, name: &str, enckey: &SecKey) -> Result<PrivateKey> {
-    let wallet = service::load_wallet(storage, name, enckey)?
+    let wallet: Wallet = storage
+        .get_value_secure(name, passphrase)?
         .err_kind(ErrorKind::InvalidInput, || {
             format!("wallet not found: {}", name)
         })?;
@@ -222,20 +223,24 @@ struct WalletSyncerImpl<'a, S: SecureStorage, C: Client, D: TxDecryptor> {
 
 impl<'a, S: SecureStorage, C: Client, D: TxDecryptor> WalletSyncerImpl<'a, S, C, D> {
     fn new(env: &'a WalletSyncer<S, C, D>) -> Result<Self> {
-        let wallet = service::load_wallet(&env.storage, &env.name, &env.enckey)?
+        let wallet = env
+            .storage
+            .get_value_secure(&env.name, &env.enckey)?
             .err_kind(ErrorKind::InvalidInput, || {
                 format!("wallet not found: {}", env.name)
             })?;
 
-        let sync_state = service::load_sync_state(&env.storage, &env.name)?;
+        let sync_state = env.storage.get_value(&env.name)?;
         let sync_state = if let Some(sync_state) = sync_state {
             sync_state
         } else {
             SyncState::genesis(env.client.genesis()?.validators)
         };
 
-        let wallet_state =
-            service::load_wallet_state(&env.storage, &env.name, &env.enckey)?.unwrap_or_default();
+        let wallet_state = env
+            .storage
+            .get_value_secure(&env.name, &env.enckey)?
+            .unwrap_or_default();
 
         Ok(Self {
             env,
@@ -265,17 +270,22 @@ impl<'a, S: SecureStorage, C: Client, D: TxDecryptor> WalletSyncerImpl<'a, S, C,
     }
 
     fn update_state(&mut self, memento: &WalletStateMemento) -> Result<()> {
-        self.wallet_state = service::modify_wallet_state(
-            &self.env.storage,
-            &self.env.name,
-            &self.env.enckey,
-            |state| state.apply_memento(memento),
-        )?;
+        let env = &self.env;
+        env.storage
+            .modify_value_secure(&env.name, &env.enckey, |state: &mut WalletState| {
+                state.apply_memento(memento)
+            })?;
+        self.wallet_state = env
+            .storage
+            .get_value_secure(&env.name, &env.passphrase)?
+            .unwrap_or_default();
         Ok(())
     }
 
     fn save(&mut self, memento: &WalletStateMemento) -> Result<()> {
-        service::save_sync_state(&self.env.storage, &self.env.name, &self.sync_state)?;
+        self.env
+            .storage
+            .set_value(&self.env.name, &self.sync_state)?;
         self.update_state(memento)?;
         Ok(())
     }
@@ -391,9 +401,11 @@ impl<'a, S: SecureStorage, C: Client, D: TxDecryptor> WalletSyncerImpl<'a, S, C,
 
     fn rollback_pending_tx(&mut self, current_block_height: u64) -> Result<()> {
         let mut memento = WalletStateMemento::default();
-        let state =
-            service::load_wallet_state(&self.env.storage, &self.env.name, &self.env.enckey)?
-                .chain(|| (ErrorKind::StorageError, "get wallet state failed"))?;
+        let state: WalletState = self
+            .env
+            .storage
+            .get_value_secure(&self.env.name, &self.env.enckey)?
+            .chain(|| (ErrorKind::StorageError, "get wallet state failed"))?;
         for tx_id in
             state.get_rollback_pending_tx(current_block_height, self.env.block_height_ensure)
         {

@@ -1,4 +1,5 @@
 //! Chain client errors
+use chain_core::init::coin;
 use std::fmt;
 
 /// Alias of `Result` objects that return [`Error`]
@@ -121,6 +122,16 @@ pub enum ErrorKind {
     ValidationError,
     /// Block data verify failed
     VerifyError,
+    /// Hashing error
+    HashError,
+    /// Coin calculation error
+    CoinError,
+}
+
+impl From<coin::CoinError> for Error {
+    fn from(err: coin::CoinError) -> Error {
+        Error::new_with_source(ErrorKind::CoinError, err.to_string(), Box::new(err))
+    }
 }
 
 impl fmt::Display for ErrorKind {
@@ -143,6 +154,8 @@ impl fmt::Display for ErrorKind {
             ErrorKind::InternalError => write!(f, "Internal error"),
             ErrorKind::ValidationError => write!(f, "Validation error"),
             ErrorKind::VerifyError => write!(f, "Verify error"),
+            ErrorKind::HashError => write!(f, "Hashing error"),
+            ErrorKind::CoinError => write!(f, "Coin calculation error"),
         }
     }
 }
