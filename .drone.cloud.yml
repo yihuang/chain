@@ -1,0 +1,34 @@
+---
+kind: pipeline
+name: default
+
+steps:
+- name: build
+  image: cryptocom/chain-test:latest
+  pull: if-not-exists
+  commands:
+  - export CARGO_HOME=$PWD/drone/cargo
+  - export CARGO_TARGET_DIR=$PWD/drone/target
+  - ./docker/build.sh
+
+- name: unit-tests
+  image: cryptocom/chain-test:latest
+  pull: if-not-exists
+  commands:
+  - export CARGO_HOME=$PWD/drone/cargo
+  - export CARGO_TARGET_DIR=$PWD/drone/target
+  - cargo test
+
+trigger:
+  branch:
+  - master
+  - staging
+  - trying
+  event:
+  - push
+
+---
+kind: signature
+hmac: d3631077bca617f42c0eedd82c5fd79ad14c9c3c5318d64ae6610d54211d7422
+
+...
