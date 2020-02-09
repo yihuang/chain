@@ -4,6 +4,8 @@ pub mod account;
 pub mod tendermint;
 /// data types related to council node operations in staked state
 pub mod validator;
+#[cfg(feature = "slab")]
+pub mod validator_spec;
 
 use blake2::Blake2s;
 use parity_scale_codec::{Decode, Encode};

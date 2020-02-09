@@ -478,6 +478,7 @@ dependencies = [
  "serde_json",
  "sgx_tstd",
  "sha2 0.8.1",
+ "slab",
  "static_assertions",
  "thiserror",
  "tiny-keccak 2.0.1",
