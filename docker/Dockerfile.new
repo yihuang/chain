@@ -3,23 +3,28 @@ ARG NETWORK_ID=AB
 
 FROM ubuntu:18.04 AS KCOV_BUILDER
 
-RUN apt-get update && \
+RUN set -e; \
+    apt-get update; \
     apt-get install -y \
         binutils-dev \
         build-essential \
         cmake \
         git \
+        curl \
         libcurl4-openssl-dev \
         libdw-dev \
         libiberty-dev \
         ninja-build \
         python3 \
         zlib1g-dev \
-        && \
-    curl -sL https://github.com/SimonKagstrom/kcov/archive/38.tar.gz | tar xz /src
+        ; \
+    mkdir /src; \
+    cd /src; \
+    curl -sL https://github.com/SimonKagstrom/kcov/archive/38.tar.gz | tar xzf - -C /src
 
-RUN mkdir /src/build && \
-    cd /src/build && \
+RUN cd /src/kcov-38 && \
+    mkdir build && \
+    cd build && \
     cmake -G 'Ninja' .. && \
     cmake --build . && \
     cmake --build . --target install
@@ -76,11 +81,10 @@ ENV SGX_MODE=$SGX_MODE
 ENV NETWORK_ID=$NETWORK_ID
 
 # install kcov
-COPY --from=KCOV_BUILDER /usr/local/bin/kcov* /usr/bin
+COPY --from=KCOV_BUILDER /usr/local/bin/kcov* /usr/bin/
 
 # install python3.8, nodejs
 RUN set -e; \
-    cargo install cargo-kcov; \
     apt-get update; \
     apt-get install -y software-properties-common; \
     add-apt-repository -y ppa:deadsnakes/ppa; \
@@ -90,7 +94,6 @@ RUN set -e; \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1; \
     apt-get purge --auto-remove -y software-properties-common; \
     rm -r /var/lib/apt/lists/*
-
 
 FROM BUILDER_BASE AS BUILDER
 LABEL maintainer="blockchain@crypto.com"

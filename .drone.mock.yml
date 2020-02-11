@@ -50,6 +50,20 @@ steps:
       - success
       - failure
 
+- name: coverage
+  image: cryptocom/chain-test:latest
+  pull: if-not-exists
+  environment:
+    CODECOV_TOKEN:
+      from_secret: CODECOV_TOKEN
+  commands:
+  - export CARGO_TARGET_DIR=$PWD/drone/target
+  - export CARGO_HOME=$PWD/drone/cargo
+  - cargo install cargo-kcov
+  - sed 's/"chain-tx-enclave/#"chain-tx-enclave/g' -i Cargo.toml;
+  - cargo kcov --all;
+  - bash <(curl -s https://codecov.io/bash);
+
 trigger:
   branch:
   - master
