@@ -70,6 +70,16 @@ steps:
   - LD_LIBRARY_PATH=/opt/intel/libsgx-enclave-common/aesm /opt/intel/libsgx-enclave-common/aesm/aesm_service
   - ./integration-tests/run_multinode.sh
 
+- name: teardown
+  image: cryptocom/chain-test:latest
+  pull: if-not-exists
+  commands:
+  - ./integration-tests/cleanup.sh
+  when:
+    status:
+      - success
+      - failure
+
 - name: rebuild-cache
   image: drillster/drone-volume-cache
   volumes:
@@ -81,15 +91,20 @@ steps:
     mount:
       - ./drone
 
-- name: teardown
+- name: coverage
   image: cryptocom/chain-test:latest
   pull: if-not-exists
+  privileged: true
+  environment:
+    CODECOV_TOKEN:
+      from_secret: CODECOV_TOKEN
   commands:
-  - ./integration-tests/cleanup.sh
-  when:
-    status:
-      - success
-      - failure
+  - export CARGO_HOME=$PWD/drone/cargo
+  - export CARGO_TARGET_DIR=$PWD/drone/target
+  - cargo clean
+  - RUSTFLAGS="$RUSTFLAGS -C link-dead-code" cargo test --no-run -v
+  - cargo kcov --no-clean-rebuild --all
+  - bash <(curl -s https://codecov.io/bash);
 
 volumes:
   - name: cache
