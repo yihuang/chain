@@ -3,6 +3,7 @@ import getpass
 import logging
 import base64
 import binascii
+import struct
 
 import fire
 from jsonrpcclient import request
@@ -315,6 +316,72 @@ class Blockchain(BaseService):
 
     def tx_search(self, query, include_proof=False, page=1, per_page=100):
         return self.call_chain('tx_search', query, include_proof, str(page), str(per_page))
+
+    def staking_state(self, addr):
+        addr = fix_address(addr)
+        if addr.startswith('0x'):
+            addr = addr[2:]
+        rsp = self.query('account', data=addr)['response']
+        assert rsp['code'] == 0, rsp
+        value = base64.b64decode(rsp['value'])
+        nonce, bonded, unbonded, unbonded_from = struct.unpack('<QQQQ', value[:32])
+        account = '0x' + binascii.hexlify(value[33:53]).decode()
+        offset = 53
+        # Option<Punishment>
+        if value[offset] == 1:
+            offset += 1
+            kind = 'NonLive' if value[offset] == 0 else 'ByzantineFault'
+            offset += 1
+            jailed_until, = struct.unpack('<Q', value[offset: offset+8])
+            offset += 8
+            if value[offset] == 0:
+                offset += 1
+                slash_amount = None
+            else:
+                offset += 1
+                slash_amount, = struct.unpack('<Q', value[offset:offset+8])
+                offset += 8
+            punishment = {
+                'kind': kind,
+                'jailed_until': jailed_until,
+                'slash_amount': slash_amount,
+            }
+        else:
+            offset += 1
+            punishment = None
+        # Option<CouncilNode>
+        if value[offset] == 1:
+            offset += 1
+            size = value[offset] // 4
+            name = value[offset+1: offset+size+1].decode()
+            offset += size + 1
+            # Option<String>
+            if value[offset] == 1:
+                offset += 1
+                size = value[offset] // 4
+                contact = value[offset+1: offset+size+1].decode()
+                offset += size + 1
+            else:
+                offset += 1
+                contact = None
+            assert value[offset] == 0, 'Ed25519 tag'
+            offset += 1
+            council_node = {
+                'name': name,
+                'contact': contact,
+                'validator_pubkey': base64.b64encode(value[offset:]).decode()
+            }
+        else:
+            council_node = None
+        return {
+            'nonce': nonce,
+            'bonded': bonded,
+            'unbonded': unbonded,
+            'unbonded_from': unbonded_from,
+            'account': account,
+            'punishment': punishment,
+            'council_node': council_node,
+        }
 
 
 class RPC:

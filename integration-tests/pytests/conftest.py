@@ -34,7 +34,7 @@ def addresses():
         transfers[0], transfers[1],
     )
 
-    state = rpc.staking.state(addrs.unbonded_staking)
+    state = rpc.chain.staking_state(addrs.unbonded_staking)
     if int(state['unbonded']) > 0:
         rpc.staking.withdraw_all_unbonded(
             addrs.unbonded_staking,

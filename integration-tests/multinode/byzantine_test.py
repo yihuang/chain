@@ -62,6 +62,6 @@ supervisor.supervisor.startProcessGroup('node1')
 wait_for_port(BASE_PORT + 10 + 9)
 
 wait_for_blocks(rpc, 13)
-punishment = rpc.staking.state(bonded_staking)['punishment']
+punishment = rpc.chain.staking_state(bonded_staking)['punishment']
 print('punishment', punishment)
 assert punishment['kind'] == 'ByzantineFault'

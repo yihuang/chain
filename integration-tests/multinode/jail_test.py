@@ -28,8 +28,7 @@ procedure:
 TARGET_NODE = 'node2'
 TARGET_NODE_MNEMONIC = 'symptom labor zone shrug chicken bargain hood define tornado mass inquiry rural step color guitar'
 TARGET_NODE_VALIDATOR_SEED = '5c1b9c06ae7485cd0f9d75819f964db3b1306ebd397f5bbdc1dd386a32b7c1c0'
-MISSED_BLOCK_THRESHOLD = 10
-JAIL_DURATION = 10
+MISSED_BLOCK_THRESHOLD = 5
 BASE_PORT = int(os.environ.get('BASE_PORT', 25560))
 TARGET_PORT = BASE_PORT + 2 * 10
 
@@ -51,7 +50,7 @@ wait_for_blocks(rpc, MISSED_BLOCK_THRESHOLD + 3)
 assert len(rpc.chain.validators()['validators']) == 2
 
 addr = rpc.address.list(enckey=enckey, name='target')[0]
-punishment = rpc.staking.state(addr)['punishment']
+punishment = rpc.chain.staking_state(addr)['punishment']
 print('punishment', punishment)
 assert punishment['kind'] == 'NonLive'
 print('slash amount', punishment['slash_amount'])

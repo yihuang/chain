@@ -80,8 +80,8 @@ while latest_block_height(rpc) - height <= 5:
     rpc.wallet.sync(enckey=enckey)
 
 print('Check the punishments')
-assert rpc.staking.state(staking1)['punishment']['kind'] == \
-    rpc.staking.state(staking2)['punishment']['kind'] == \
+assert rpc.chain.staking_state(staking1)['punishment']['kind'] == \
+    rpc.chain.staking_state(staking2)['punishment']['kind'] == \
     'NonLive'
 
 print('Wait for slash_wait_period(5 seconds)')
@@ -94,6 +94,6 @@ while True:
         break
 
 print('Check slash amount')
-assert rpc.staking.state(staking1)['punishment']['slash_amount'] == \
-    rpc.staking.state(staking2)['punishment']['slash_amount'] == \
-    '6600000000000000'
+assert rpc.chain.staking_state(staking1)['punishment']['slash_amount'] == \
+    rpc.chain.staking_state(staking2)['punishment']['slash_amount'] == \
+    6600000000000000
