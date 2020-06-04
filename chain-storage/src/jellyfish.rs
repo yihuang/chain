@@ -125,10 +125,10 @@ impl Encode for SparseMerkleProof {
         // leaf
         match self.0.leaf() {
             None => dest.push_byte(0),
-            Some((hash1, hash2)) => {
+            Some(leaf) => {
                 dest.push_byte(1);
-                dest.write(hash1.as_ref());
-                dest.write(hash2.as_ref());
+                dest.write(leaf.key().as_ref());
+                dest.write(leaf.value_hash().as_ref());
             }
         }
 
@@ -152,7 +152,7 @@ impl Decode for SparseMerkleProof {
     fn decode<I: Input>(input: &mut I) -> Result<Self, Error> {
         let leaf = match input.read_byte()? {
             0 => None,
-            1 => Some((
+            1 => Some(jellyfish_merkle::SparseMerkleLeafNode::new(
                 HashValue::new(H256::decode(input)?),
                 HashValue::new(H256::decode(input)?),
             )),
