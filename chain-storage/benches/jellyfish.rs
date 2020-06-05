@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 
 use chain_core::state::account::{StakedState, StakedStateAddress};
 use chain_storage::buffer::MemStore;
-use chain_storage::jellyfish::{get_with_proof, put_stakings, Version};
+use chain_storage::jellyfish::{flush_stakings2, get_with_proof, put_stakings, Version};
 
 fn bench_insert_256(b: &mut Bencher) {
     let stakings = (0x00u8..=0x0fu8)
@@ -82,10 +84,40 @@ fn bench_get(b: &mut Bencher) {
     });
 }
 
+fn bench_delete(b: &mut Bencher) {
+    let stakings = (0x00u8..=0x0fu8)
+        .map(|version| {
+            (0x00u8..=0x0fu8)
+                .map(|i| {
+                    let mut seed = [0; 20];
+                    seed[0] = version;
+                    seed[1] = i;
+                    StakedState::default(StakedStateAddress::BasicRedeem(seed.into()))
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let mut store = MemStore::new();
+    for (version, xs) in stakings.iter().enumerate() {
+        put_stakings(&mut store, version as Version, xs.iter())
+            .expect("jellyfish error with in memory storage");
+    }
+
+    let mut seed = [0; 20];
+    seed[0] = 0x10;
+    let buffer = vec![(StakedStateAddress::BasicRedeem(seed.into()), None)]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+    b.iter(|| {
+        flush_stakings2(&mut store, 0x10, buffer.clone()).unwrap();
+    });
+}
+
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("jellyfish, insert 256", bench_insert_256);
     c.bench_function("jellyfish, insert", bench_insert);
     c.bench_function("jellyfish, get_with_proof", bench_get);
+    c.bench_function("jellyfish, delete", bench_delete);
 }
 
 criterion_group!(benches, criterion_benchmark);

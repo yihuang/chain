@@ -2099,7 +2099,7 @@ checksum = "b8b7a7c0c47db5545ed3fef7468ee7bb5b74691498139e4b3f6a20685dc6dd8e"
 [[package]]
 name = "jellyfish-merkle"
 version = "0.1.0"
-source = "git+https://github.com/yihuang/libra.git?rev=656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d#656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d"
+source = "git+https://github.com/yihuang/libra.git?rev=cd91f033dde1691f636079d2a9cfb19bbe94f8a2#cd91f033dde1691f636079d2a9cfb19bbe94f8a2"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -2301,7 +2301,7 @@ dependencies = [
 [[package]]
 name = "libra-canonical-serialization"
 version = "0.1.0"
-source = "git+https://github.com/yihuang/libra.git?rev=656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d#656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d"
+source = "git+https://github.com/yihuang/libra.git?rev=cd91f033dde1691f636079d2a9cfb19bbe94f8a2#cd91f033dde1691f636079d2a9cfb19bbe94f8a2"
 dependencies = [
  "libra-workspace-hack",
  "serde",
@@ -2311,7 +2311,7 @@ dependencies = [
 [[package]]
 name = "libra-crypto"
 version = "0.1.0"
-source = "git+https://github.com/yihuang/libra.git?rev=656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d#656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d"
+source = "git+https://github.com/yihuang/libra.git?rev=cd91f033dde1691f636079d2a9cfb19bbe94f8a2#cd91f033dde1691f636079d2a9cfb19bbe94f8a2"
 dependencies = [
  "anyhow",
  "blake3",
@@ -2334,7 +2334,7 @@ dependencies = [
 [[package]]
 name = "libra-crypto-derive"
 version = "0.1.0"
-source = "git+https://github.com/yihuang/libra.git?rev=656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d#656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d"
+source = "git+https://github.com/yihuang/libra.git?rev=cd91f033dde1691f636079d2a9cfb19bbe94f8a2#cd91f033dde1691f636079d2a9cfb19bbe94f8a2"
 dependencies = [
  "libra-workspace-hack",
  "proc-macro2 1.0.18",
@@ -2345,7 +2345,7 @@ dependencies = [
 [[package]]
 name = "libra-nibble"
 version = "0.1.0"
-source = "git+https://github.com/yihuang/libra.git?rev=656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d#656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d"
+source = "git+https://github.com/yihuang/libra.git?rev=cd91f033dde1691f636079d2a9cfb19bbe94f8a2#cd91f033dde1691f636079d2a9cfb19bbe94f8a2"
 dependencies = [
  "libra-workspace-hack",
  "serde",
@@ -2354,7 +2354,7 @@ dependencies = [
 [[package]]
 name = "libra-types"
 version = "0.1.0"
-source = "git+https://github.com/yihuang/libra.git?rev=656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d#656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d"
+source = "git+https://github.com/yihuang/libra.git?rev=cd91f033dde1691f636079d2a9cfb19bbe94f8a2#cd91f033dde1691f636079d2a9cfb19bbe94f8a2"
 dependencies = [
  "anyhow",
  "libra-crypto",
@@ -2366,7 +2366,7 @@ dependencies = [
 [[package]]
 name = "libra-workspace-hack"
 version = "0.1.0"
-source = "git+https://github.com/yihuang/libra.git?rev=656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d#656c5b5dec3ca44f2c3eb288e4bb08b4a0ee395d"
+source = "git+https://github.com/yihuang/libra.git?rev=cd91f033dde1691f636079d2a9cfb19bbe94f8a2#cd91f033dde1691f636079d2a9cfb19bbe94f8a2"
 dependencies = [
  "bytes 0.5.4",
  "cc",

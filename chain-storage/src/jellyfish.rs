@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::mem;
 use std::sync::Arc;
@@ -108,6 +109,35 @@ pub fn flush_stakings<S: StoreKV>(
     buffer: StakingBuffer,
 ) -> Result<H256> {
     put_stakings(storage, version, buffer.values())
+}
+
+/// Flush buffer to merkle trie
+pub fn flush_stakings2<S: StoreKV>(
+    storage: &mut S,
+    version: Version,
+    buffer: HashMap<StakedStateAddress, Option<StakedState>>,
+) -> Result<H256> {
+    let reader = KVReader::new(storage);
+    let tree = JellyfishMerkleTree::new(&reader);
+    let blob_set = buffer
+        .into_iter()
+        .map(|(addr, mstaking)| {
+            (
+                HashValue::new(to_stake_key(&addr)),
+                mstaking.map(|staking| staking.encode().into()),
+            )
+        })
+        .collect::<Vec<_>>();
+    ensure!(!blob_set.is_empty(), "can't put empty stakings");
+    let (root_hashes, batch) = tree.put_blob_sets2(vec![blob_set], version)?;
+    assert_eq!(root_hashes.len(), 1);
+    for (key, node) in batch.node_batch.iter() {
+        storage.set((COL_TRIE_NODE, key.encode()?), node.encode()?);
+    }
+    for key in batch.stale_node_index_batch {
+        storage.set((COL_TRIE_STALED, encode_stale_node_index(&key)?), vec![]);
+    }
+    Ok(*root_hashes[0].as_ref())
 }
 
 /// Compute root hash of stakings in memory
