@@ -1,6 +1,7 @@
 mod api;
 pub mod buffer;
 pub mod jellyfish;
+pub mod utxo;
 
 use crate::buffer::{flush_storage, BufferStore, Get, KVBuffer};
 use crate::jellyfish::{put_stakings, Version};

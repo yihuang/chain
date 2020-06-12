@@ -15,7 +15,6 @@ use parity_scale_codec::{Decode, Encode, Error, Input, Output};
 use chain_core::common::{H256, HASH_SIZE_256};
 use chain_core::init::coin::{sum_coins, Coin, CoinError};
 use chain_core::state::account::{to_stake_key, StakedState, StakedStateAddress};
-use chain_core::state::tendermint::BlockHeight;
 
 use super::{COL_TRIE_NODE, COL_TRIE_STALED};
 use crate::buffer::{
@@ -232,17 +231,18 @@ pub fn get_with_proof<S: GetKV>(
 }
 
 /// Collect staled nodes
-pub fn collect_stale_node_indices<S: KeyValueDB>(
-    storage: &S,
-    stale_since: BlockHeight,
-) -> Vec<StaleNodeIndex> {
+pub fn collect_stale_nodes<S: KeyValueDB>(storage: &S, stale_since: Version) -> Vec<NodeKey> {
     storage
-        .iter_with_prefix(COL_TRIE_STALED, &stale_since.value().to_be_bytes())
-        .map(|(key, _)| decode_stale_node_index(&key).expect("storage corrupted"))
+        .iter_with_prefix(COL_TRIE_STALED, &stale_since.to_be_bytes())
+        .map(|(key, _)| {
+            decode_stale_node_index(&key)
+                .expect("storage corrupted")
+                .node_key
+        })
         .collect::<Vec<_>>()
 }
 
-fn encode_stale_node_index(index: &StaleNodeIndex) -> Result<Vec<u8>> {
+pub(crate) fn encode_stale_node_index(index: &StaleNodeIndex) -> Result<Vec<u8>> {
     let mut encoded = vec![];
     // Encoded as big endian to keep the numeric order
     encoded.extend_from_slice(&index.stale_since_version.to_be_bytes());
