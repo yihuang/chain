@@ -4,8 +4,6 @@ use anyhow::Result;
 use jellyfish_merkle::{AccountStateBlob, HashValue, JellyfishMerkleTree, Version};
 use kvdb::KeyValueDB;
 use parity_scale_codec::{Decode, Encode};
-#[cfg(test)]
-use rand::Rng;
 
 use crate::{
     buffer::{BufferGetter, BufferStore, Get, GetKV, Store, StoreKV},
@@ -50,19 +48,11 @@ pub type UTxOBufferGetter<'a, S, H> = BufferGetter<'a, UTxOGetter<'a, S>, H>;
 
 #[derive(Clone, Encode, Decode, PartialEq, Eq, Hash)]
 pub struct UTxO {
-    txid: [u8; 32],
-    index: u16,
+    pub txid: [u8; 32],
+    pub index: u16,
 }
 
 impl UTxO {
-    #[cfg(test)]
-    pub fn random() -> Self {
-        UTxO {
-            txid: rand::thread_rng().gen(),
-            index: rand::thread_rng().gen(),
-        }
-    }
-
     pub fn hash(&self) -> HashValue {
         HashValue::new(blake3::hash(&self.encode()).into())
     }
@@ -134,6 +124,14 @@ mod tests {
     use crate::jellyfish::collect_stale_nodes;
     use crate::NUM_COLUMNS;
     use kvdb_memorydb::create as create_memorydb;
+    use rand::Rng;
+
+    fn random_utxo() -> UTxO {
+        UTxO {
+            txid: rand::thread_rng().gen(),
+            index: rand::thread_rng().gen(),
+        }
+    }
 
     #[test]
     fn check_utxo() {
