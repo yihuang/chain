@@ -1,9 +1,10 @@
+use chain_storage::buffer::Get;
 use chain_storage::utxo::{flush_utxo_kvdb, UTxO, UTxOBuffer, UTxOGetter};
-use criterion::{criterion_group, criterion_main, Bencher, Criterion};
+use chain_storage::NUM_COLUMNS;
+use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
-use std::iter;
 
-const DB_PATH: &str = "tmpdb";
+const DB_PATH: &str = "/data/yihuang/chain/tmpdb";
 const VERSION: u64 = 10;
 
 fn random_utxo() -> UTxO {
@@ -19,34 +20,38 @@ fn criterion_benchmark(c: &mut Criterion) {
         DB_PATH,
     )
     .unwrap();
+
+    c.bench_function("jellyfish-utxo, get", |b| {
+        let utxo = random_utxo();
+        b.iter(|| {
+            UTxOGetter::new(&store, VERSION - 2).get(&utxo);
+        });
+    });
+
     c.bench_function("jellyfish-utxo, remove", |b| {
         let utxo = random_utxo();
-        let buffer = vec![(utxo, None)].into_iter().collect();
+        let buffer = vec![(utxo, None)].into_iter().collect::<UTxOBuffer>();
         b.iter(|| {
             flush_utxo_kvdb(&store, buffer.clone(), VERSION).unwrap();
         });
     });
     c.bench_function("jellyfish-utxo, insert", |b| {
         let utxo = random_utxo();
-        let buffer = vec![(utxo, Some(()))].into_iter().collect();
+        let buffer = vec![(utxo, Some(()))].into_iter().collect::<UTxOBuffer>();
         b.iter(|| {
             flush_utxo_kvdb(&store, buffer.clone(), VERSION).unwrap();
         });
     });
-    c.bench_function("jellyfish-utxo, insert256", |b| {
-        let utxos = (0..256).map(|_| random_utxo());
-        let buffer = utxos.map(|utxo| (utxo, Some(()))).into_iter().collect();
-        b.iter(|| {
-            flush_utxo_kvdb(&store, buffer.clone(), VERSION).unwrap();
-        });
-    });
-
-    c.bench_function("jellyfish-utxo, get", |b| {
-        let utxo = random_utxo();
-        b.iter(|| {
-            UTxOGetter::new(&store, VERSION).get(&utxo);
-        });
-    });
+    // c.bench_function("jellyfish-utxo, insert256", |b| {
+    //     let utxos = (0..256).map(|_| random_utxo());
+    //     let buffer = utxos
+    //         .map(|utxo| (utxo, Some(())))
+    //         .into_iter()
+    //         .collect::<UTxOBuffer>();
+    //     b.iter(|| {
+    //         flush_utxo_kvdb(&store, buffer.clone(), VERSION).unwrap();
+    //     });
+    // });
 }
 
 criterion_group!(benches, criterion_benchmark);
